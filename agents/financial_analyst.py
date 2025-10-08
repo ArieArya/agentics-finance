@@ -27,6 +27,8 @@ from tools import (
     HeadlinesFetcherTool,
     VolatilityNewsCorrelationTool,
     EventTimelineTool,
+    ComprehensiveVolatilityExplanationTool,
+    IdentifyCorrelatedMovementsTool,
 )
 import os
 from dotenv import load_dotenv
@@ -70,6 +72,9 @@ def create_financial_analyst_agent():
         HeadlinesFetcherTool(),
         VolatilityNewsCorrelationTool(),
         EventTimelineTool(),
+        # Comprehensive volatility explanation tools
+        ComprehensiveVolatilityExplanationTool(),
+        IdentifyCorrelatedMovementsTool(),
         # Basic visualization tools
         TimeSeriesPlotTool(),
         CorrelationHeatmapTool(),

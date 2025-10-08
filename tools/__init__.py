@@ -35,6 +35,10 @@ from .news_tools import (
     VolatilityNewsCorrelationTool,
     EventTimelineTool
 )
+from .volatility_explanation_tools import (
+    ComprehensiveVolatilityExplanationTool,
+    IdentifyCorrelatedMovementsTool
+)
 
 __all__ = [
     # Data query tools
@@ -66,5 +70,8 @@ __all__ = [
     'HeadlinesFetcherTool',
     'VolatilityNewsCorrelationTool',
     'EventTimelineTool',
+    # Volatility explanation tools
+    'ComprehensiveVolatilityExplanationTool',
+    'IdentifyCorrelatedMovementsTool',
 ]
 

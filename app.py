@@ -155,23 +155,77 @@ def load_visualization(viz_id: str):
 
 
 def render_time_series(config: dict):
-    """Render time series plot."""
+    """Render time series plot with support for dual y-axes when scales differ significantly."""
     df = pd.DataFrame(config["data"])
+    indicators = config.get("indicators", df["indicator"].unique().tolist())
 
-    fig = px.line(
-        df,
-        x="date",
-        y="value",
-        color="indicator",
-        title=config["title"],
-        labels={"date": "Date", "value": "Value", "indicator": "Indicator"}
-    )
+    # Indicators that should be on secondary axis (volatility indices, percentages, etc.)
+    secondary_axis_indicators = ['^VIX', 'UNRATE', 'FEDFUNDS', 'DGS10', 'DGS2', 'CPIAUCSL']
 
-    fig.update_layout(
-        hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        height=500
-    )
+    # Determine if we need dual axes
+    # Check if we have both a secondary axis indicator and a primary axis indicator
+    has_secondary = any(ind in secondary_axis_indicators for ind in indicators)
+    has_primary = any(ind not in secondary_axis_indicators for ind in indicators)
+    use_dual_axes = has_secondary and has_primary and len(indicators) > 1
+
+    if use_dual_axes:
+        # Use make_subplots with secondary_y for better visualization of different scales
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+
+        for i, indicator in enumerate(indicators):
+            indicator_df = df[df["indicator"] == indicator]
+            use_secondary = indicator in secondary_axis_indicators
+
+            fig.add_trace(
+                go.Scatter(
+                    x=indicator_df["date"],
+                    y=indicator_df["value"],
+                    name=indicator,
+                    line=dict(color=colors[i % len(colors)]),
+                    mode='lines'
+                ),
+                secondary_y=use_secondary
+            )
+
+        # Update axes labels
+        primary_indicators = [ind for ind in indicators if ind not in secondary_axis_indicators]
+        secondary_indicators = [ind for ind in indicators if ind in secondary_axis_indicators]
+
+        fig.update_yaxes(
+            title_text=", ".join(primary_indicators) if primary_indicators else "Value",
+            secondary_y=False
+        )
+        fig.update_yaxes(
+            title_text=", ".join(secondary_indicators) if secondary_indicators else "Value",
+            secondary_y=True
+        )
+
+        fig.update_xaxes(title_text="Date")
+
+        fig.update_layout(
+            title=config["title"],
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            height=500
+        )
+    else:
+        # Use standard plotly express for single scale
+        fig = px.line(
+            df,
+            x="date",
+            y="value",
+            color="indicator",
+            title=config["title"],
+            labels={"date": "Date", "value": "Value", "indicator": "Indicator"}
+        )
+
+        fig.update_layout(
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            height=500
+        )
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -530,7 +584,7 @@ with st.sidebar:
 
     with st.expander("📈 Economic Analysis"):
         st.markdown("""
-        - Year-over-year inflation trends from 2020 to 2023
+        - What are the year-over-year inflation trends from 2020 to 2023?
         - Create a dashboard showing unemployment, inflation, and retail sales during COVID
         - How much did the unemployment rate change from 2019 to 2021?
         - Show the relationship between oil prices and inflation
@@ -538,6 +592,11 @@ with st.sidebar:
 
     with st.expander("⚠️ Risk & Volatility"):
         st.markdown("""
+        - Why was the S&P 500 so volatile in March 2020?
+        - Explain the volatility spike in oil prices during 2008
+        - What caused Bitcoin's extreme volatility in 2021?
+        - What indicators moved together during the 2008 crisis?
+        - Identify correlated movements on March 11, 2020
         - What was the volatility of the S&P 500 during March 2020?
         - Show me the drawdown chart for Bitcoin from 2021 to 2022
         - Find the most volatile periods for oil prices
@@ -552,11 +611,10 @@ with st.sidebar:
         - Analyze the relationship between interest rates and inflation
         """)
 
-    with st.expander("📰 News & Events (NEW!)"):
+    with st.expander("📰 News & Events"):
         st.markdown("""
-        - Why was the S&P 500 so volatile in March 2020?
-        - What news events caused the 2008 financial crisis crash?
-        - Explain the volatility spike in Bitcoin during 2021
+        - What were the most popular news on January 22nd, 2012?
+        - Show me headlines from the 2008 financial crisis
         - What major events affected the market during the COVID pandemic?
         - Create a timeline of significant market events from 2020-2022
         """)
