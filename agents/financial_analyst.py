@@ -2,8 +2,7 @@
 Financial Analyst Agent Configuration
 """
 
-from crewai import Agent, Task, Crew
-from langchain_openai import ChatOpenAI
+from crewai import Agent, Task, Crew, LLM
 from tools import (
     DateRangeQueryTool,
     IndicatorStatsTool,
@@ -15,6 +14,16 @@ from tools import (
     CorrelationHeatmapTool,
     VolatilityPlotTool,
     DistributionPlotTool,
+    ReturnsAnalysisTool,
+    DrawdownAnalysisTool,
+    MovingAverageTool,
+    PercentageChangeTool,
+    YearOverYearTool,
+    ScatterPlotTool,
+    ComparativePerformanceTool,
+    MovingAveragePlotTool,
+    DrawdownChartTool,
+    MultiIndicatorPlotTool,
 )
 import os
 from dotenv import load_dotenv
@@ -31,11 +40,11 @@ def create_financial_analyst_agent():
         Agent: Configured CrewAI agent
     """
 
-    # Initialize LLM
-    llm = ChatOpenAI(
-        model=os.getenv("OPENAI_MODEL_NAME", "gpt-4"),
+    # Initialize LLM (Gemini)
+    llm = LLM(
+        model="gemini/gemini-2.0-flash",
         temperature=0.1,
-        api_key=os.getenv("OPENAI_API_KEY")
+        api_key=os.getenv("GEMINI_API_KEY")
     )
 
     # Initialize all tools
@@ -44,15 +53,27 @@ def create_financial_analyst_agent():
         AvailableIndicatorsTool(),
         DateRangeQueryTool(),
         IndicatorStatsTool(),
-        # Analysis tools
+        # Basic analysis tools
         VolatilityAnalysisTool(),
         CorrelationAnalysisTool(),
         FindExtremeValuesTool(),
-        # Visualization tools
+        # Advanced analysis tools
+        ReturnsAnalysisTool(),
+        DrawdownAnalysisTool(),
+        MovingAverageTool(),
+        PercentageChangeTool(),
+        YearOverYearTool(),
+        # Basic visualization tools
         TimeSeriesPlotTool(),
         CorrelationHeatmapTool(),
         VolatilityPlotTool(),
         DistributionPlotTool(),
+        # Advanced visualization tools
+        ScatterPlotTool(),
+        ComparativePerformanceTool(),
+        MovingAveragePlotTool(),
+        DrawdownChartTool(),
+        MultiIndicatorPlotTool(),
     ]
 
     # Create agent
@@ -112,8 +133,14 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             "Instructions:\n"
             "1. Analyze the current question in the context of the conversation history\n"
             "2. If the question refers to a previous topic (e.g., 'similar analysis', 'same indicator'), use that context\n"
-            "3. Use available tools to query and analyze the relevant data\n"
-            "4. If appropriate, create visualizations to support your analysis\n"
+            "3. Choose the right tools for the task:\n"
+            "   - For VISUALIZATIONS: Use visualization tools DIRECTLY (they load data themselves)\n"
+            "   - For SPECIFIC DATA VALUES: Use analysis tools or data query tools\n"
+            "   - DO NOT query data before creating visualizations (it creates token overload)\n"
+            "4. When creating dashboards or multiple indicators:\n"
+            "   - Use MultiIndicatorPlotTool for multi-indicator time series\n"
+            "   - Use ComparativePerformanceTool for performance comparisons\n"
+            "   - These tools handle data loading automatically\n"
             "5. Provide a comprehensive, well-structured answer with:\n"
             "   - Key findings and insights\n"
             "   - Statistical evidence and data points\n"

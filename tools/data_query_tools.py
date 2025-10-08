@@ -21,8 +21,10 @@ class DateRangeQueryInput(BaseModel):
 class DateRangeQueryTool(BaseTool):
     name: str = "Query Data by Date Range"
     description: str = (
-        "Retrieves financial data for specific indicators within a date range. "
-        "Use this tool to fetch historical data for analysis. "
+        "Retrieves SUMMARY of financial data for specific indicators within a date range. "
+        "Returns statistics and sample data points (NOT full dataset). "
+        "Use this ONLY when you need specific data values to report to the user. "
+        "Do NOT use this before creating visualizations - visualization tools load data themselves. "
         "Supports both macro factors (FEDFUNDS, CPIAUCSL, UNRATE, etc.) "
         "and market factors (^GSPC, ^VIX, BTC-USD, etc.)."
     )
@@ -34,34 +36,66 @@ class DateRangeQueryTool(BaseTool):
             indicator_list = [ind.strip() for ind in indicators.split(',')]
 
             # Load appropriate dataset(s)
-            result_data = {}
+            result_summary = {}
 
             if dataset in ["macro", "both"]:
                 macro_df = load_macro_factors()
                 macro_indicators = [ind for ind in indicator_list if ind in macro_df.columns]
                 if macro_indicators:
                     filtered = macro_df.loc[start_date:end_date, macro_indicators]
-                    result_data['macro'] = filtered.to_dict('index')
+
+                    # Create summary instead of full data
+                    summary = {
+                        "data_points": len(filtered),
+                        "indicators": {}
+                    }
+
+                    for ind in macro_indicators:
+                        series = filtered[ind].dropna()
+                        summary["indicators"][ind] = {
+                            "start_value": float(series.iloc[0]) if len(series) > 0 else None,
+                            "end_value": float(series.iloc[-1]) if len(series) > 0 else None,
+                            "min": float(series.min()),
+                            "max": float(series.max()),
+                            "mean": float(series.mean()),
+                            "change": float(series.iloc[-1] - series.iloc[0]) if len(series) > 0 else None,
+                            "pct_change": float(((series.iloc[-1] - series.iloc[0]) / series.iloc[0]) * 100) if len(series) > 0 and series.iloc[0] != 0 else None
+                        }
+
+                    result_summary['macro'] = summary
 
             if dataset in ["market", "both"]:
                 market_df = load_market_factors()
                 market_indicators = [ind for ind in indicator_list if ind in market_df.columns]
                 if market_indicators:
                     filtered = market_df.loc[start_date:end_date, market_indicators]
-                    result_data['market'] = filtered.to_dict('index')
 
-            # Convert dates to strings for JSON serialization
-            formatted_result = {}
-            for dataset_name, data in result_data.items():
-                formatted_result[dataset_name] = {
-                    str(date): values for date, values in data.items()
-                }
+                    # Create summary instead of full data
+                    summary = {
+                        "data_points": len(filtered),
+                        "indicators": {}
+                    }
+
+                    for ind in market_indicators:
+                        series = filtered[ind].dropna()
+                        summary["indicators"][ind] = {
+                            "start_value": float(series.iloc[0]) if len(series) > 0 else None,
+                            "end_value": float(series.iloc[-1]) if len(series) > 0 else None,
+                            "min": float(series.min()),
+                            "max": float(series.max()),
+                            "mean": float(series.mean()),
+                            "change": float(series.iloc[-1] - series.iloc[0]) if len(series) > 0 else None,
+                            "pct_change": float(((series.iloc[-1] - series.iloc[0]) / series.iloc[0]) * 100) if len(series) > 0 and series.iloc[0] != 0 else None
+                        }
+
+                    result_summary['market'] = summary
 
             return json.dumps({
                 "success": True,
                 "date_range": {"start": start_date, "end": end_date},
                 "indicators": indicator_list,
-                "data": formatted_result
+                "summary": result_summary,
+                "note": "This is a summary. For visualizations, use visualization tools directly."
             }, indent=2)
 
         except Exception as e:

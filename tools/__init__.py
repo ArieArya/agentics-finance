@@ -16,6 +16,20 @@ from .visualization_tools import (
     VolatilityPlotTool,
     DistributionPlotTool
 )
+from .advanced_analysis_tools import (
+    ReturnsAnalysisTool,
+    DrawdownAnalysisTool,
+    MovingAverageTool,
+    PercentageChangeTool,
+    YearOverYearTool
+)
+from .advanced_visualization_tools import (
+    ScatterPlotTool,
+    ComparativePerformanceTool,
+    MovingAveragePlotTool,
+    DrawdownChartTool,
+    MultiIndicatorPlotTool
+)
 
 __all__ = [
     # Data query tools
@@ -31,5 +45,17 @@ __all__ = [
     'CorrelationHeatmapTool',
     'VolatilityPlotTool',
     'DistributionPlotTool',
+    # Advanced analysis tools
+    'ReturnsAnalysisTool',
+    'DrawdownAnalysisTool',
+    'MovingAverageTool',
+    'PercentageChangeTool',
+    'YearOverYearTool',
+    # Advanced visualization tools
+    'ScatterPlotTool',
+    'ComparativePerformanceTool',
+    'MovingAveragePlotTool',
+    'DrawdownChartTool',
+    'MultiIndicatorPlotTool',
 ]
 

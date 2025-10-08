@@ -27,11 +27,12 @@ Create a `.env` file in the project root:
 cp env.example .env
 ```
 
-Edit `.env` and add your OpenAI API key:
+Edit `.env` and add your Gemini API key:
 ```
-OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_MODEL_NAME=gpt-4
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
+
+Get your API key from: https://aistudio.google.com/app/apikey
 
 ## 3. Run the Application
 

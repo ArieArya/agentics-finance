@@ -87,18 +87,31 @@ if "clear_input" not in st.session_state:
 
 
 def clean_old_visualizations():
-    """Remove old visualization files from previous turns."""
+    """Remove visualization files that are no longer referenced in conversation history."""
     viz_dir = os.path.join(os.path.dirname(__file__), "visualizations")
     if os.path.exists(viz_dir):
-        # Keep only visualizations from current turn
-        all_viz_files = glob.glob(os.path.join(viz_dir, "*.json"))
-        current_viz_files = [
-            os.path.join(viz_dir, f"{viz_id}.json")
-            for viz_id in st.session_state.current_visualizations
-        ]
+        # Collect all visualization IDs from entire conversation history
+        all_referenced_viz_ids = set()
 
+        for message in st.session_state.messages:
+            if "visualizations" in message and message["visualizations"]:
+                all_referenced_viz_ids.update(message["visualizations"])
+
+        # Also include current visualizations
+        all_referenced_viz_ids.update(st.session_state.current_visualizations)
+
+        # Get all visualization files
+        all_viz_files = glob.glob(os.path.join(viz_dir, "*.json"))
+
+        # Build set of files to keep
+        files_to_keep = {
+            os.path.join(viz_dir, f"{viz_id}.json")
+            for viz_id in all_referenced_viz_ids
+        }
+
+        # Delete only files not referenced in conversation history
         for viz_file in all_viz_files:
-            if viz_file not in current_viz_files:
+            if viz_file not in files_to_keep:
                 try:
                     os.remove(viz_file)
                 except:
@@ -127,6 +140,16 @@ def load_visualization(viz_id: str):
         render_volatility_plot(viz_config)
     elif viz_type == "distribution":
         render_distribution(viz_config)
+    elif viz_type == "scatter":
+        render_scatter(viz_config)
+    elif viz_type == "comparative_performance":
+        render_comparative_performance(viz_config)
+    elif viz_type == "moving_average":
+        render_moving_average(viz_config)
+    elif viz_type == "drawdown":
+        render_drawdown(viz_config)
+    elif viz_type == "multi_indicator":
+        render_multi_indicator(viz_config)
     else:
         st.warning(f"Unknown visualization type: {viz_type}")
 
@@ -257,6 +280,199 @@ def render_distribution(config: dict):
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_scatter(config: dict):
+    """Render scatter plot."""
+    df = pd.DataFrame(config["data"])
+
+    fig = px.scatter(
+        df,
+        x="x",
+        y="y",
+        title=config["title"],
+        labels={"x": config["x_indicator"], "y": config["y_indicator"]},
+        hover_data=["date"]
+    )
+
+    # Add trendline
+    fig.update_traces(marker=dict(size=5, opacity=0.6))
+
+    # Add correlation text
+    correlation = config.get("correlation", 0)
+    fig.add_annotation(
+        text=f"Correlation: {correlation:.3f}",
+        xref="paper", yref="paper",
+        x=0.02, y=0.98,
+        showarrow=False,
+        bgcolor="rgba(255,255,255,0.8)",
+        bordercolor="black",
+        borderwidth=1
+    )
+
+    fig.update_layout(height=500)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_comparative_performance(config: dict):
+    """Render comparative performance chart (normalized to 100)."""
+    df = pd.DataFrame(config["data"])
+
+    fig = px.line(
+        df,
+        x="date",
+        y="value",
+        color="indicator",
+        title=config["title"],
+        labels={"date": "Date", "value": "Normalized Value (Base=100)", "indicator": "Indicator"}
+    )
+
+    # Add horizontal line at 100
+    fig.add_hline(y=100, line_dash="dash", line_color="gray", annotation_text="Start")
+
+    fig.update_layout(
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=500
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_moving_average(config: dict):
+    """Render moving average chart."""
+    df = pd.DataFrame(config["data"])
+
+    fig = go.Figure()
+
+    # Add price line
+    fig.add_trace(go.Scatter(
+        x=df["date"],
+        y=df["price"],
+        name=config["indicator"],
+        line=dict(color="#1f77b4", width=2)
+    ))
+
+    # Add moving averages
+    colors = ["#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+    for i, window in enumerate(config["windows"]):
+        ma_col = f"MA_{window}"
+        if ma_col in df.columns:
+            fig.add_trace(go.Scatter(
+                x=df["date"],
+                y=df[ma_col],
+                name=f"MA {window}",
+                line=dict(color=colors[i % len(colors)], width=1.5, dash="dash")
+            ))
+
+    fig.update_layout(
+        title=config["title"],
+        xaxis_title="Date",
+        yaxis_title="Value",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=500
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_drawdown(config: dict):
+    """Render drawdown chart."""
+    df = pd.DataFrame(config["data"])
+
+    # Create figure with secondary y-axis
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.1,
+        subplot_titles=(config["indicator"], "Drawdown from Peak"),
+        row_heights=[0.6, 0.4]
+    )
+
+    # Add price
+    fig.add_trace(
+        go.Scatter(
+            x=df["date"],
+            y=df["price"],
+            name=config["indicator"],
+            line=dict(color="#1f77b4")
+        ),
+        row=1, col=1
+    )
+
+    # Add drawdown
+    fig.add_trace(
+        go.Scatter(
+            x=df["date"],
+            y=df["drawdown_pct"],
+            name="Drawdown %",
+            fill='tozeroy',
+            line=dict(color="#d62728")
+        ),
+        row=2, col=1
+    )
+
+    # Add zero line
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", row=2, col=1)
+
+    fig.update_xaxes(title_text="Date", row=2, col=1)
+    fig.update_yaxes(title_text="Value", row=1, col=1)
+    fig.update_yaxes(title_text="Drawdown %", row=2, col=1)
+
+    fig.update_layout(
+        title=config["title"],
+        hovermode="x unified",
+        height=600,
+        showlegend=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_multi_indicator(config: dict):
+    """Render multi-indicator dashboard with subplots."""
+    indicators = config["indicators"]
+    data = config["data"]
+
+    # Create subplots
+    fig = make_subplots(
+        rows=len(indicators),
+        cols=1,
+        shared_xaxes=True,
+        subplot_titles=indicators,
+        vertical_spacing=0.05
+    )
+
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+
+    # Add each indicator
+    for i, indicator in enumerate(indicators):
+        indicator_data = data[indicator]
+        df = pd.DataFrame(indicator_data)
+
+        fig.add_trace(
+            go.Scatter(
+                x=df["date"],
+                y=df["value"],
+                name=indicator,
+                line=dict(color=colors[i % len(colors)]),
+                showlegend=False
+            ),
+            row=i+1, col=1
+        )
+
+        fig.update_yaxes(title_text=indicator, row=i+1, col=1)
+
+    fig.update_xaxes(title_text="Date", row=len(indicators), col=1)
+
+    fig.update_layout(
+        title=config["title"],
+        hovermode="x unified",
+        height=250 * len(indicators)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def extract_visualization_ids(response: str) -> list:
     """Extract visualization IDs from agent response."""
     import re
@@ -303,13 +519,38 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("#### 💡 Example Questions")
-    st.markdown("""
-    - What was the volatility of the S&P 500 during the 2008 financial crisis?
-    - Show me the correlation between VIX and S&P 500
-    - Plot the Federal Funds Rate and unemployment rate over time
-    - What were the highest values of oil prices in 2022?
-    - Analyze the relationship between Bitcoin and gold
-    """)
+
+    with st.expander("📊 Market Analysis"):
+        st.markdown("""
+        - Compare performance of S&P 500, Gold, and Bitcoin from 2020 to 2023
+        - What was the maximum drawdown during the 2008 financial crisis?
+        - Show me S&P 500 with 50 and 200-day moving averages
+        - Calculate monthly returns for Bitcoin in 2021
+        """)
+
+    with st.expander("📈 Economic Analysis"):
+        st.markdown("""
+        - Year-over-year inflation trends from 2020 to 2023
+        - Create a dashboard showing unemployment, inflation, and retail sales during COVID
+        - How much did the unemployment rate change from 2019 to 2021?
+        - Show the relationship between oil prices and inflation
+        """)
+
+    with st.expander("⚠️ Risk & Volatility"):
+        st.markdown("""
+        - What was the volatility of the S&P 500 during March 2020?
+        - Show me the drawdown chart for Bitcoin from 2021 to 2022
+        - Find the most volatile periods for oil prices
+        - Analyze drawdowns and recovery time for the stock market
+        """)
+
+    with st.expander("🔗 Correlations & Relationships"):
+        st.markdown("""
+        - Show me the correlation between VIX and S&P 500
+        - Create a scatter plot of unemployment vs stock market performance
+        - What's the correlation between gold, Bitcoin, and stocks?
+        - Analyze the relationship between interest rates and inflation
+        """)
 
 # Main content
 st.markdown('<div class="main-header">Financial Data Analyst</div>', unsafe_allow_html=True)
@@ -363,7 +604,7 @@ if submit_button and user_input:
     st.session_state.current_visualizations = []
 
     # Show loading state
-    with st.spinner("🔍 Analyzing data..."):
+    with st.spinner("Thinking..."):
         try:
             # Run analysis with conversation history for context
             response = run_analysis(user_input, st.session_state.messages)

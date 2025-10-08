@@ -46,7 +46,7 @@ An intelligent financial data analysis application powered by CrewAI agents, cap
 ### Prerequisites
 
 - Python 3.9+
-- OpenAI API key
+- Gemini API key (from https://aistudio.google.com/app/apikey)
 
 ### Installation
 
@@ -71,8 +71,8 @@ pip install -r requirements.txt
 # Copy the example file
 cp env.example .env
 
-# Edit .env and add your OpenAI API key
-# OPENAI_API_KEY=your_api_key_here
+# Edit .env and add your Gemini API key
+# GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ### Running the Application
@@ -155,7 +155,7 @@ The application intelligently manages visualizations across multi-turn conversat
 
 The financial analyst agent is configured with:
 
-- **Model**: OpenAI GPT-4 (configurable via environment variables)
+- **Model**: Google Gemini 2.0 Flash (via CrewAI's LLM integration)
 - **Temperature**: 0.1 (for consistent, factual responses)
 - **Max Iterations**: 15 (allows complex multi-step analyses)
 - **Tools**: All 10 custom tools for comprehensive analysis
@@ -193,7 +193,7 @@ This project is provided as-is for educational and research purposes.
 ## 🙏 Acknowledgments
 
 - **CrewAI**: For the agent orchestration framework
-- **OpenAI**: For the GPT-4 language model
+- **Google Gemini**: For the Gemini 2.0 Flash language model
 - **Plotly**: For beautiful, interactive visualizations
 - **Streamlit**: For the rapid web application framework
 

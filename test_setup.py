@@ -101,23 +101,22 @@ def test_environment():
     from dotenv import load_dotenv
     load_dotenv()
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
-        print("✗ OPENAI_API_KEY not set in .env file")
-        print("  Please create a .env file with your OpenAI API key")
+        print("✗ GEMINI_API_KEY not set in .env file")
+        print("  Please create a .env file with your Gemini API key")
+        print("  Get your key from: https://aistudio.google.com/app/apikey")
         print("  See env.example for template")
         return False
 
-    if api_key == "your_openai_api_key_here":
-        print("✗ OPENAI_API_KEY is still set to default value")
+    if api_key == "your_gemini_api_key_here":
+        print("✗ GEMINI_API_KEY is still set to default value")
         print("  Please update .env with your actual API key")
         return False
 
-    print("✓ OPENAI_API_KEY is set")
-
-    model = os.getenv("OPENAI_MODEL_NAME", "gpt-4")
-    print(f"✓ Model: {model}")
+    print("✓ GEMINI_API_KEY is set")
+    print("✓ Model: gemini/gemini-2.0-flash")
 
     return True
 
