@@ -30,6 +30,11 @@ from .advanced_visualization_tools import (
     DrawdownChartTool,
     MultiIndicatorPlotTool
 )
+from .news_tools import (
+    HeadlinesFetcherTool,
+    VolatilityNewsCorrelationTool,
+    EventTimelineTool
+)
 
 __all__ = [
     # Data query tools
@@ -57,5 +62,9 @@ __all__ = [
     'MovingAveragePlotTool',
     'DrawdownChartTool',
     'MultiIndicatorPlotTool',
+    # News and event tools
+    'HeadlinesFetcherTool',
+    'VolatilityNewsCorrelationTool',
+    'EventTimelineTool',
 ]
 

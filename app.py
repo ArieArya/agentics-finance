@@ -552,6 +552,15 @@ with st.sidebar:
         - Analyze the relationship between interest rates and inflation
         """)
 
+    with st.expander("📰 News & Events (NEW!)"):
+        st.markdown("""
+        - Why was the S&P 500 so volatile in March 2020?
+        - What news events caused the 2008 financial crisis crash?
+        - Explain the volatility spike in Bitcoin during 2021
+        - What major events affected the market during the COVID pandemic?
+        - Create a timeline of significant market events from 2020-2022
+        """)
+
 # Main content
 st.markdown('<div class="main-header">Financial Data Analyst</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Ask questions about macroeconomic and market data from 2008 to present</div>', unsafe_allow_html=True)

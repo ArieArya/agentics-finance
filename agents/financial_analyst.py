@@ -24,6 +24,9 @@ from tools import (
     MovingAveragePlotTool,
     DrawdownChartTool,
     MultiIndicatorPlotTool,
+    HeadlinesFetcherTool,
+    VolatilityNewsCorrelationTool,
+    EventTimelineTool,
 )
 import os
 from dotenv import load_dotenv
@@ -63,6 +66,10 @@ def create_financial_analyst_agent():
         MovingAverageTool(),
         PercentageChangeTool(),
         YearOverYearTool(),
+        # News and event analysis tools
+        HeadlinesFetcherTool(),
+        VolatilityNewsCorrelationTool(),
+        EventTimelineTool(),
         # Basic visualization tools
         TimeSeriesPlotTool(),
         CorrelationHeatmapTool(),
