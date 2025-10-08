@@ -83,31 +83,44 @@ def create_financial_analyst_agent():
     return agent
 
 
-def create_analysis_task(agent: Agent, user_question: str) -> Task:
+def create_analysis_task(agent: Agent, user_question: str, conversation_history: list = None) -> Task:
     """
     Create a task for the financial analyst agent.
 
     Args:
         agent: The agent to assign the task to
         user_question: The user's question or request
+        conversation_history: List of previous messages for context
 
     Returns:
         Task: Configured CrewAI task
     """
+    # Build conversation context
+    context = ""
+    if conversation_history and len(conversation_history) > 0:
+        context = "Previous Conversation:\n"
+        for msg in conversation_history[-6:]:  # Include last 3 exchanges (6 messages)
+            role = "User" if msg["role"] == "user" else "Assistant"
+            content = msg["content"][:500]  # Truncate long responses
+            context += f"{role}: {content}\n\n"
+        context += "---\n\n"
+
     task = Task(
         description=(
-            f"User Question: {user_question}\n\n"
+            f"{context}"
+            f"Current User Question: {user_question}\n\n"
             "Instructions:\n"
-            "1. Analyze the user's question carefully\n"
-            "2. Use available tools to query and analyze the relevant data\n"
-            "3. If appropriate, create visualizations to support your analysis\n"
-            "4. Provide a comprehensive, well-structured answer with:\n"
+            "1. Analyze the current question in the context of the conversation history\n"
+            "2. If the question refers to a previous topic (e.g., 'similar analysis', 'same indicator'), use that context\n"
+            "3. Use available tools to query and analyze the relevant data\n"
+            "4. If appropriate, create visualizations to support your analysis\n"
+            "5. Provide a comprehensive, well-structured answer with:\n"
             "   - Key findings and insights\n"
             "   - Statistical evidence and data points\n"
             "   - Context and interpretation\n"
             "   - Any relevant visualizations created\n"
-            "5. Be specific with dates, values, and indicators\n"
-            "6. If you create visualizations, mention the visualization IDs in your response\n"
+            "6. Be specific with dates, values, and indicators\n"
+            "7. If you create visualizations, mention the visualization IDs in your response\n"
         ),
         agent=agent,
         expected_output=(
@@ -123,12 +136,13 @@ def create_analysis_task(agent: Agent, user_question: str) -> Task:
     return task
 
 
-def run_analysis(user_question: str) -> str:
+def run_analysis(user_question: str, conversation_history: list = None) -> str:
     """
-    Run a complete analysis for a user question.
+    Run a complete analysis for a user question with conversation context.
 
     Args:
         user_question: The user's question
+        conversation_history: List of previous messages for context
 
     Returns:
         str: The agent's analysis and response
@@ -136,7 +150,7 @@ def run_analysis(user_question: str) -> str:
     try:
         # Create agent and task
         agent = create_financial_analyst_agent()
-        task = create_analysis_task(agent, user_question)
+        task = create_analysis_task(agent, user_question, conversation_history)
 
         # Create crew and run
         crew = Crew(

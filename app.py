@@ -28,7 +28,6 @@ st.markdown("""
     .main-header {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #1f77b4;
         margin-bottom: 0.5rem;
     }
     .sub-header {
@@ -267,9 +266,6 @@ def extract_visualization_ids(response: str) -> list:
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### Financial Data Analyst")
-    st.markdown("---")
-
     st.markdown("#### 📁 Available Data")
 
     with st.expander("📈 Dataset Information"):
@@ -369,8 +365,8 @@ if submit_button and user_input:
     # Show loading state
     with st.spinner("🔍 Analyzing data..."):
         try:
-            # Run analysis
-            response = run_analysis(user_input)
+            # Run analysis with conversation history for context
+            response = run_analysis(user_input, st.session_state.messages)
 
             # Extract visualization IDs from response
             viz_ids = extract_visualization_ids(response)
@@ -396,13 +392,4 @@ if submit_button and user_input:
 
     # Rerun to display new messages
     st.rerun()
-
-# Footer
-st.markdown("---")
-st.markdown(
-    '<div style="text-align: center; color: #666; font-size: 0.9rem;">'
-    'Powered by CrewAI • OpenAI GPT-4 • Plotly'
-    '</div>',
-    unsafe_allow_html=True
-)
 
