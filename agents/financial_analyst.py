@@ -2,7 +2,8 @@
 Financial Analyst Agent Configuration
 """
 
-from crewai import Agent, Task, Crew, LLM
+from agentics import AG
+from crewai import Agent, Task, Crew
 from tools import (
     DateRangeQueryTool,
     IndicatorStatsTool,
@@ -45,12 +46,8 @@ def create_financial_analyst_agent():
         Agent: Configured CrewAI agent
     """
 
-    # Initialize LLM (Gemini)
-    llm = LLM(
-        model="gemini/gemini-2.0-flash",
-        temperature=0.1,
-        api_key=os.getenv("GEMINI_API_KEY")
-    )
+    # Initialize LLM
+    llm = AG.get_llm_provider()
 
     # Initialize all tools
     tools = [

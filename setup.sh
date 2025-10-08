@@ -47,14 +47,32 @@ fi
 
 echo ""
 
+# Install Agentics framework in editable mode
+echo "Installing Agentics framework..."
+if [ -d "Agentics" ]; then
+    pip install -e ./Agentics > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        echo "✓ Agentics framework installed successfully"
+    else
+        echo "✗ Error installing Agentics framework"
+        exit 1
+    fi
+else
+    echo "⚠️  Warning: Agentics directory not found"
+    echo "   If you need Agentics, please ensure it's in the project directory"
+fi
+
+echo ""
+
 # Check if .env file exists
 if [ ! -f .env ]; then
     echo "Creating .env file from template..."
     cp env.example .env
     echo "✓ .env file created"
     echo ""
-    echo "⚠️  IMPORTANT: Please edit .env and add your OpenAI API key"
-    echo "   Open .env and replace 'your_openai_api_key_here' with your actual API key"
+    echo "⚠️  IMPORTANT: Please edit .env and add your Gemini API key"
+    echo "   Open .env and replace 'your_gemini_api_key' with your actual API key"
+    echo "   Get your key from: https://aistudio.google.com/app/apikey"
 else
     echo "✓ .env file already exists"
 fi
@@ -65,7 +83,8 @@ echo "Setup Complete!"
 echo "=========================================="
 echo ""
 echo "Next steps:"
-echo "1. Edit .env and add your OpenAI API key (if not already done)"
+echo "1. Edit .env and add your Gemini API key (if not already done)"
+echo "   Get your key from: https://aistudio.google.com/app/apikey"
 echo "2. Run the test script: python test_setup.py"
 echo "3. Start the application: streamlit run app.py"
 echo ""

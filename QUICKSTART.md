@@ -2,6 +2,12 @@
 
 ## 1. Environment Setup
 
+You can do this via our setup script
+```bash
+bash setup.sh
+```
+
+Or, you can set up your environment manually.
 ```bash
 # Navigate to project directory
 cd agentics-finance
@@ -16,7 +22,12 @@ venv\Scripts\activate  # Windows
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Install Agentics framework (local dependency)
+pip install -e ./Agentics
 ```
+
+> **Note**: The Agentics framework is installed from the local `Agentics/` directory in editable mode.
 
 ## 2. Configure API Key
 
