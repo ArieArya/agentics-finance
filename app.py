@@ -42,15 +42,15 @@ st.markdown("""
         border-left: 4px solid;
     }
     .user-message {
-        background-color: #1a2332;
+        background-color: var(--secondary-background-color);
         border-left-color: #1f77b4;
-        color: #ffffff;
+        color: var(--text-color);
     }
     .assistant-message {
-        background-color: #1e1e1e;
+        background-color: var(--secondary-background-color);
         border-left-color: #2ca02c;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-        color: #ffffff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        color: var(--text-color);
     }
     .stButton>button {
         width: 100%;
