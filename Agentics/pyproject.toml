@@ -1,7 +1,6 @@
 [project]
 name = "agentics-py"
-# version = "0.0.8"
-dynamic = ["version"]
+version = "0.0.8"
 description = "Agentics is a Python framework that provides structured, scalable, and semantically grounded agentic computation."
 authors = [
     { name = "Alfio Gliozzo", email = "gliozzo@us.ibm.com" },
@@ -39,11 +38,8 @@ dependencies = [
 package = true
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.version]
-source = "uv-dynamic-versioning"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentics"]
