@@ -20,14 +20,11 @@ source venv/bin/activate  # Mac/Linux
 # or
 venv\Scripts\activate  # Windows
 
-# Install dependencies
+# Install dependencies (includes Agentics framework from local directory)
 pip install -r requirements.txt
-
-# Install Agentics framework (local dependency)
-pip install -e ./Agentics
 ```
 
-> **Note**: The Agentics framework is installed from the local `Agentics/` directory in editable mode.
+> **Note**: The Agentics framework is automatically installed from the local `Agentics/` directory via requirements.txt.
 
 ## 2. Configure API Key
 

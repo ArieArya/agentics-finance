@@ -64,12 +64,9 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 3. Install dependencies:
 ```bash
 pip install -r requirements.txt
-
-# Install Agentics framework (local dependency)
-pip install -e ./Agentics
 ```
 
-> **Note**: The Agentics framework is installed from the local `Agentics/` directory in editable mode. This allows for immediate access to any updates in the Agentics source.
+> **Note**: The Agentics framework is automatically installed from the local `Agentics/` directory in editable mode via requirements.txt.
 
 4. Set up environment variables:
 ```bash

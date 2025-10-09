@@ -20,8 +20,8 @@ streamlit>=1.31.0
 pydantic>=2.6.0
 
 # Local dependencies
-# Agentics framework - installed from local directory (see setup.sh)
-# Installed via: pip install -e ./Agentics
+# Agentics framework - installed from local directory
+-e ./Agentics
 
 # Note: Compatible with Python 3.10 - 3.13
 # Tested with Python 3.13.3

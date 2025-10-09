@@ -34,32 +34,16 @@ pip install --upgrade pip > /dev/null 2>&1
 echo "✓ pip upgraded"
 echo ""
 
-# Install requirements
+# Install requirements (includes Agentics framework)
 echo "Installing dependencies (this may take a few minutes)..."
+echo "Note: This includes the Agentics framework from the local directory"
 pip install -r requirements.txt
 
 if [ $? -eq 0 ]; then
-    echo "✓ Dependencies installed successfully"
+    echo "✓ Dependencies installed successfully (including Agentics)"
 else
     echo "✗ Error installing dependencies"
     exit 1
-fi
-
-echo ""
-
-# Install Agentics framework in editable mode
-echo "Installing Agentics framework..."
-if [ -d "Agentics" ]; then
-    pip install -e ./Agentics > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        echo "✓ Agentics framework installed successfully"
-    else
-        echo "✗ Error installing Agentics framework"
-        exit 1
-    fi
-else
-    echo "⚠️  Warning: Agentics directory not found"
-    echo "   If you need Agentics, please ensure it's in the project directory"
 fi
 
 echo ""
