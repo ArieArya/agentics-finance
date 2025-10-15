@@ -39,6 +39,24 @@ from .volatility_explanation_tools import (
     ComprehensiveVolatilityExplanationTool,
     IdentifyCorrelatedMovementsTool
 )
+from .fundamental_tools import (
+    CompanyFundamentalsQueryTool,
+    CompareFundamentalsTool,
+    ScreenCompaniesTool,
+    CompanyValuationTool,
+    FundamentalHistoryTool
+)
+from .portfolio_tools import (
+    PortfolioRecommendationTool,
+    FundamentalMacroCorrelationTool,
+    SectorAnalysisTool
+)
+from .fundamental_visualization_tools import (
+    CompanyComparisonChartTool,
+    FundamentalTimeSeriesPlotTool,
+    ValuationScatterPlotTool,
+    PortfolioRecommendationChartTool
+)
 
 __all__ = [
     # Data query tools
@@ -73,5 +91,20 @@ __all__ = [
     # Volatility explanation tools
     'ComprehensiveVolatilityExplanationTool',
     'IdentifyCorrelatedMovementsTool',
+    # Fundamental analysis tools
+    'CompanyFundamentalsQueryTool',
+    'CompareFundamentalsTool',
+    'ScreenCompaniesTool',
+    'CompanyValuationTool',
+    'FundamentalHistoryTool',
+    # Portfolio tools
+    'PortfolioRecommendationTool',
+    'FundamentalMacroCorrelationTool',
+    'SectorAnalysisTool',
+    # Fundamental visualization tools
+    'CompanyComparisonChartTool',
+    'FundamentalTimeSeriesPlotTool',
+    'ValuationScatterPlotTool',
+    'PortfolioRecommendationChartTool',
 ]
 

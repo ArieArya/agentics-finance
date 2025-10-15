@@ -10,6 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from agents import run_analysis
 from utils import get_data_summary, get_column_descriptions
@@ -127,31 +128,44 @@ def load_visualization(viz_id: str):
         st.warning(f"Visualization {viz_id} not found.")
         return
 
-    with open(viz_file, 'r') as f:
-        viz_config = json.load(f)
+    try:
+        with open(viz_file, 'r') as f:
+            viz_config = json.load(f)
 
-    viz_type = viz_config.get("type")
+        viz_type = viz_config.get("type")
 
-    if viz_type == "time_series":
-        render_time_series(viz_config)
-    elif viz_type == "correlation_heatmap":
-        render_correlation_heatmap(viz_config)
-    elif viz_type == "volatility_plot":
-        render_volatility_plot(viz_config)
-    elif viz_type == "distribution":
-        render_distribution(viz_config)
-    elif viz_type == "scatter":
-        render_scatter(viz_config)
-    elif viz_type == "comparative_performance":
-        render_comparative_performance(viz_config)
-    elif viz_type == "moving_average":
-        render_moving_average(viz_config)
-    elif viz_type == "drawdown":
-        render_drawdown(viz_config)
-    elif viz_type == "multi_indicator":
-        render_multi_indicator(viz_config)
-    else:
-        st.warning(f"Unknown visualization type: {viz_type}")
+        if viz_type == "time_series":
+            render_time_series(viz_config)
+        elif viz_type == "correlation_heatmap":
+            render_correlation_heatmap(viz_config)
+        elif viz_type == "volatility_plot":
+            render_volatility_plot(viz_config)
+        elif viz_type == "distribution":
+            render_distribution(viz_config)
+        elif viz_type == "scatter":
+            render_scatter(viz_config)
+        elif viz_type == "comparative_performance":
+            render_comparative_performance(viz_config)
+        elif viz_type == "moving_average":
+            render_moving_average(viz_config)
+        elif viz_type == "drawdown":
+            render_drawdown(viz_config)
+        elif viz_type == "multi_indicator":
+            render_multi_indicator(viz_config)
+        elif viz_type == "company_comparison":
+            render_company_comparison(viz_config)
+        elif viz_type == "fundamental_time_series":
+            render_fundamental_time_series(viz_config)
+        elif viz_type == "valuation_scatter":
+            render_valuation_scatter(viz_config)
+        elif viz_type == "portfolio_recommendation":
+            render_portfolio_recommendation(viz_config)
+        else:
+            st.warning(f"Unknown visualization type: {viz_type}")
+    except Exception as e:
+        st.error(f"Error rendering visualization {viz_id}: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
 
 
 def render_time_series(config: dict):
@@ -527,6 +541,255 @@ def render_multi_indicator(config: dict):
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_company_comparison(config: dict):
+    """Render company comparison bar chart."""
+    data = config["data"]
+    metrics = config["metrics"]
+
+    # Create subplots for each metric
+    num_metrics = len(metrics)
+    fig = make_subplots(
+        rows=num_metrics,
+        cols=1,
+        subplot_titles=metrics,
+        vertical_spacing=0.08
+    )
+
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+
+    for i, metric in enumerate(metrics):
+        tickers = [d["ticker"] for d in data]
+        values = [d.get(metric) for d in data]
+
+        # Filter out None values
+        filtered_data = [(t, v) for t, v in zip(tickers, values) if v is not None]
+        if not filtered_data:
+            continue
+
+        tickers_filtered, values_filtered = zip(*filtered_data)
+
+        fig.add_trace(
+            go.Bar(
+                x=list(tickers_filtered),
+                y=list(values_filtered),
+                name=metric,
+                marker_color=colors[i % len(colors)],
+                showlegend=False
+            ),
+            row=i+1, col=1
+        )
+
+        fig.update_yaxes(title_text=metric, row=i+1, col=1)
+
+    fig.update_xaxes(title_text="Company", row=num_metrics, col=1)
+
+    fig.update_layout(
+        title=config["title"],
+        height=300 * num_metrics,
+        showlegend=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_fundamental_time_series(config: dict):
+    """Render fundamental time series plot."""
+    df = pd.DataFrame(config["data"])
+    metrics = config["metrics"]
+
+    # Check if we need dual axes based on scale differences
+    if len(metrics) > 1:
+        # Simple heuristic: if ranges differ by more than 10x, use dual axes
+        ranges = {}
+        for metric in metrics:
+            metric_data = df[df["metric"] == metric]["value"]
+            if not metric_data.empty:
+                ranges[metric] = metric_data.max() - metric_data.min()
+
+        if ranges:
+            max_range = max(ranges.values())
+            min_range = min(ranges.values())
+            use_dual_axes = max_range / min_range > 10 if min_range > 0 else False
+        else:
+            use_dual_axes = False
+    else:
+        use_dual_axes = False
+
+    if use_dual_axes and len(metrics) == 2:
+        # Use dual y-axes for 2 metrics with different scales
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        colors = ["#1f77b4", "#ff7f0e"]
+        for i, metric in enumerate(metrics):
+            metric_df = df[df["metric"] == metric]
+            fig.add_trace(
+                go.Scatter(
+                    x=metric_df["date"],
+                    y=metric_df["value"],
+                    name=metric,
+                    line=dict(color=colors[i]),
+                    mode='lines+markers'
+                ),
+                secondary_y=(i == 1)
+            )
+
+        fig.update_yaxes(title_text=metrics[0], secondary_y=False)
+        fig.update_yaxes(title_text=metrics[1], secondary_y=True)
+    else:
+        # Standard plot
+        fig = px.line(
+            df,
+            x="date",
+            y="value",
+            color="metric",
+            title=config["title"],
+            labels={"date": "Date", "value": "Value", "metric": "Metric"},
+            markers=True
+        )
+
+    fig.update_layout(
+        title=config["title"],
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=500
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_valuation_scatter(config: dict):
+    """Render valuation scatter plot."""
+    df = pd.DataFrame(config["data"])
+
+    fig = px.scatter(
+        df,
+        x="x",
+        y="y",
+        text="ticker",
+        title=config["title"],
+        labels={"x": config["x_metric"], "y": config["y_metric"]},
+        size_max=15
+    )
+
+    # Position labels above points
+    fig.update_traces(
+        textposition='top center',
+        marker=dict(size=12, opacity=0.7)
+    )
+
+    # Add trendline
+    if len(df) >= 2:
+        z = np.polyfit(df["x"], df["y"], 1)
+        p = np.poly1d(z)
+        x_trend = np.linspace(df["x"].min(), df["x"].max(), 100)
+        fig.add_trace(
+            go.Scatter(
+                x=x_trend,
+                y=p(x_trend),
+                mode='lines',
+                name='Trendline',
+                line=dict(dash='dash', color='gray')
+            )
+        )
+
+    fig.update_layout(height=500)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_portfolio_recommendation(config: dict):
+    """Render portfolio recommendation chart."""
+    long_positions = config["long_positions"]
+    short_positions = config["short_positions"]
+
+    # Create subplots for metrics
+    fig = make_subplots(
+        rows=3, cols=1,
+        subplot_titles=("Return on Equity (%)", "P/E Ratio", "EPS Growth (%)"),
+        vertical_spacing=0.12,
+        specs=[[{"secondary_y": False}], [{"secondary_y": False}], [{"secondary_y": False}]]
+    )
+
+    # Combine data
+    all_positions = []
+    for pos in long_positions:
+        all_positions.append({**pos, "position": "LONG", "color": "#2ca02c"})
+    for pos in short_positions:
+        all_positions.append({**pos, "position": "SHORT", "color": "#d62728"})
+
+    if not all_positions:
+        st.warning("No positions to display")
+        return
+
+    tickers = [p["ticker"] for p in all_positions]
+    colors = [p["color"] for p in all_positions]
+
+    # ROE
+    roe_values = [p.get("roe") for p in all_positions]
+    fig.add_trace(
+        go.Bar(
+            x=tickers,
+            y=roe_values,
+            marker_color=colors,
+            name="ROE",
+            showlegend=False
+        ),
+        row=1, col=1
+    )
+
+    # P/E Ratio
+    pe_values = [p.get("pe_ratio") for p in all_positions]
+    fig.add_trace(
+        go.Bar(
+            x=tickers,
+            y=pe_values,
+            marker_color=colors,
+            name="P/E",
+            showlegend=False
+        ),
+        row=2, col=1
+    )
+
+    # EPS Growth
+    eps_growth_values = [p.get("eps_growth") for p in all_positions]
+    fig.add_trace(
+        go.Bar(
+            x=tickers,
+            y=eps_growth_values,
+            marker_color=colors,
+            name="EPS Growth",
+            showlegend=False
+        ),
+        row=3, col=1
+    )
+
+    # Add legend
+    fig.add_trace(
+        go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=10, color='#2ca02c'),
+            name='LONG'
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(size=10, color='#d62728'),
+            name='SHORT'
+        )
+    )
+
+    fig.update_layout(
+        title=config["title"],
+        height=800,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def extract_visualization_ids(response: str) -> list:
     """Extract visualization IDs from agent response."""
     import re
@@ -611,7 +874,26 @@ with st.sidebar:
         - Analyze the relationship between interest rates and inflation
         """)
 
-    with st.expander("📰 News & Events"):
+	 with st.expander("📈 Portfolio Recommendations"):
+        st.markdown("""
+        - Recommend a balanced long/short portfolio of 5 stocks each
+        - Which companies should I long based on value strategy?
+        - Generate growth-focused portfolio recommendations
+        - What are the best quality companies to invest in right now?
+        - Compare portfolio recommendations: value vs growth strategies
+        """)
+
+    with st.expander("💼 Company Fundamentals"):
+        st.markdown("""
+        - What are the fundamentals for AAPL?
+        - Compare AAPL, MSFT, and GOOGL on ROE, P/E ratio, and EPS growth
+        - Find all companies with ROE above 20% and P/E below 20
+        - Show me AAPL's EPS and ROE evolution from 2015 to 2023
+        - Create a scatter plot of ROE vs P/E ratio for all companies
+        - How does AAPL's ROE correlate with the Fed Funds rate?
+        """)
+
+	with st.expander("📰 News & Events"):
         st.markdown("""
         - What were the most popular news on January 22nd, 2012?
         - Show me headlines from the 2008 financial crisis
@@ -621,7 +903,7 @@ with st.sidebar:
 
 # Main content
 st.markdown('<div class="main-header">Financial Data Analyst</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Ask questions about macroeconomic and market data from 2008 to present</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Ask questions about macroeconomic data, market factors, and company fundamentals from 2008 to present</div>', unsafe_allow_html=True)
 
 # Display chat history
 for message in st.session_state.messages:

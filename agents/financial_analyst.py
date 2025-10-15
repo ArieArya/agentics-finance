@@ -30,6 +30,18 @@ from tools import (
     EventTimelineTool,
     ComprehensiveVolatilityExplanationTool,
     IdentifyCorrelatedMovementsTool,
+    CompanyFundamentalsQueryTool,
+    CompareFundamentalsTool,
+    ScreenCompaniesTool,
+    CompanyValuationTool,
+    FundamentalHistoryTool,
+    PortfolioRecommendationTool,
+    FundamentalMacroCorrelationTool,
+    SectorAnalysisTool,
+    CompanyComparisonChartTool,
+    FundamentalTimeSeriesPlotTool,
+    ValuationScatterPlotTool,
+    PortfolioRecommendationChartTool,
 )
 import os
 from dotenv import load_dotenv
@@ -72,6 +84,16 @@ def create_financial_analyst_agent():
         # Comprehensive volatility explanation tools
         ComprehensiveVolatilityExplanationTool(),
         IdentifyCorrelatedMovementsTool(),
+        # Company fundamental analysis tools
+        CompanyFundamentalsQueryTool(),
+        CompareFundamentalsTool(),
+        ScreenCompaniesTool(),
+        CompanyValuationTool(),
+        FundamentalHistoryTool(),
+        # Portfolio and macro correlation tools
+        PortfolioRecommendationTool(),
+        FundamentalMacroCorrelationTool(),
+        SectorAnalysisTool(),
         # Basic visualization tools
         TimeSeriesPlotTool(),
         CorrelationHeatmapTool(),
@@ -83,6 +105,11 @@ def create_financial_analyst_agent():
         MovingAveragePlotTool(),
         DrawdownChartTool(),
         MultiIndicatorPlotTool(),
+        # Fundamental visualization tools
+        CompanyComparisonChartTool(),
+        FundamentalTimeSeriesPlotTool(),
+        ValuationScatterPlotTool(),
+        PortfolioRecommendationChartTool(),
     ]
 
     # Create agent
@@ -95,11 +122,16 @@ def create_financial_analyst_agent():
         ),
         backstory=(
             "You are an expert financial analyst with deep knowledge of macroeconomics, "
-            "financial markets, and data analysis. You have access to comprehensive datasets "
-            "containing macroeconomic indicators (Fed Funds Rate, CPI, unemployment, etc.) "
-            "and market factors (S&P 500, VIX, Bitcoin, oil prices, etc.) spanning from 2008 to present. "
-            "You excel at identifying trends, correlations, and anomalies in financial data. "
-            "When users ask questions, you use your tools to query the data, perform analysis, "
+            "financial markets, equity analysis, and data science. You have access to comprehensive datasets: "
+            "1) Macroeconomic indicators (Fed Funds Rate, CPI, unemployment, retail sales, etc.) "
+            "2) Market factors (S&P 500, VIX, Bitcoin, gold, oil prices, Treasury yields, etc.) "
+            "3) Company fundamentals (61 publicly traded companies with EPS, ROE, ROA, P/E ratios, margins, etc.) "
+            "All data spans from 2008 to present. "
+            "You excel at identifying trends, correlations, anomalies, and investment opportunities. "
+            "You can analyze company fundamentals, compare valuations, screen for opportunities, "
+            "and generate long/short portfolio recommendations based on fundamental strength, "
+            "macro context, and relative valuations. "
+            "When users ask questions, you use your tools to query data, perform analysis, "
             "and create visualizations to support your insights. You always provide context "
             "and explain your findings in clear, accessible language."
         ),
@@ -143,20 +175,28 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             "1. Analyze the current question in the context of the conversation history\n"
             "2. If the question refers to a previous topic (e.g., 'similar analysis', 'same indicator'), use that context\n"
             "3. Choose the right tools for the task:\n"
-            "   - For VISUALIZATIONS: Use visualization tools DIRECTLY (they load data themselves)\n"
+            "   - For MARKET/MACRO VISUALIZATIONS: Use market visualization tools DIRECTLY (they load data themselves)\n"
+            "   - For COMPANY COMPARISONS: Use CompanyComparisonChartTool for side-by-side fundamental metrics\n"
+            "   - For PORTFOLIO RECOMMENDATIONS: Use PortfolioRecommendationTool + PortfolioRecommendationChartTool\n"
+            "   - For COMPANY ANALYSIS: Use CompanyFundamentalsQueryTool, CompanyValuationTool, FundamentalHistoryTool\n"
+            "   - For SCREENING: Use ScreenCompaniesTool to filter companies by criteria\n"
             "   - For SPECIFIC DATA VALUES: Use analysis tools or data query tools\n"
             "   - DO NOT query data before creating visualizations (it creates token overload)\n"
-            "4. When creating dashboards or multiple indicators:\n"
-            "   - Use MultiIndicatorPlotTool for multi-indicator time series\n"
-            "   - Use ComparativePerformanceTool for performance comparisons\n"
-            "   - These tools handle data loading automatically\n"
-            "5. Provide a comprehensive, well-structured answer with:\n"
+            "4. When working with company fundamentals:\n"
+            "   - Compare companies using CompareFundamentalsTool for analysis, CompanyComparisonChartTool for visualization\n"
+            "   - Use ValuationScatterPlotTool to show relationships between metrics (e.g., ROE vs P/E)\n"
+            "   - Use FundamentalTimeSeriesPlotTool to show evolution of company metrics over time\n"
+            "5. For portfolio recommendations:\n"
+            "   - Use PortfolioRecommendationTool with strategy parameter ('value', 'growth', 'quality', or 'balanced')\n"
+            "   - Visualize recommendations with PortfolioRecommendationChartTool\n"
+            "   - Explain rationale based on fundamentals and macro context\n"
+            "6. Provide a comprehensive, well-structured answer with:\n"
             "   - Key findings and insights\n"
             "   - Statistical evidence and data points\n"
             "   - Context and interpretation\n"
             "   - Any relevant visualizations created\n"
-            "6. Be specific with dates, values, and indicators\n"
-            "7. If you create visualizations, mention the visualization IDs in your response\n"
+            "7. Be specific with dates, values, and indicators/tickers\n"
+            "8. If you create visualizations, mention the visualization IDs in your response\n"
         ),
         agent=agent,
         expected_output=(
