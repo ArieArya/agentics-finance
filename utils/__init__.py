@@ -1,5 +1,6 @@
 """Utility modules for the finance analysis application."""
 
+# DJ30, Firm, and Market data utilities
 from .data_loader import (
     load_macro_factors,
     load_market_factors,
