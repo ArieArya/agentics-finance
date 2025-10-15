@@ -87,12 +87,84 @@ class PortfolioRecommendationTool(BaseTool):
             long_recommendations = scored_companies[:num_long]
             short_recommendations = scored_companies[-num_short:][::-1]  # Reverse to show worst first
 
-            # Generate rationale for each
-            for company in long_recommendations:
-                company['rationale'] = self._generate_long_rationale(company, strategy)
+            # Calculate simple quartile-based ratings
+            scores = [c['score'] for c in scored_companies]
+            q75 = np.percentile(scores, 75)
+            q50 = np.percentile(scores, 50)
+            q25 = np.percentile(scores, 25)
 
-            for company in short_recommendations:
+            # Generate rationale and rating for each
+            for i, company in enumerate(long_recommendations):
+                company['rank'] = i + 1
+                company['rationale'] = self._generate_long_rationale(company, strategy)
+                # Simple rating based on quartiles
+                if company['score'] >= q75:
+                    company['rating'] = "Strong Buy"
+                elif company['score'] >= q50:
+                    company['rating'] = "Buy"
+                else:
+                    company['rating'] = "Hold"
+
+            for i, company in enumerate(short_recommendations):
+                company['rank'] = i + 1
                 company['rationale'] = self._generate_short_rationale(company, strategy)
+                # Simple rating based on quartiles (inverted for shorts)
+                if company['score'] <= q25:
+                    company['rating'] = "Strong Sell"
+                elif company['score'] <= q50:
+                    company['rating'] = "Sell"
+                else:
+                    company['rating'] = "Hold"
+
+            # Create detailed text summary
+            text_summary = f"\n=== PORTFOLIO RECOMMENDATIONS ({strategy.upper()} STRATEGY) ===\n\n"
+
+            text_summary += "LONG POSITIONS (BUY):\n"
+            for company in long_recommendations:
+                text_summary += f"  #{company['rank']}. {company['ticker']} - {company['rating']}\n"
+                roe_val = company.get('roe') or 0
+                pe_val = company.get('pe_ratio') or 0
+                text_summary += f"      Price: ${company['price']:.2f} | ROE: {roe_val:.1f}% | P/E: {pe_val:.1f}\n"
+                text_summary += f"      Rationale: {company['rationale']}\n\n"
+
+            text_summary += "\nSHORT POSITIONS (SELL):\n"
+            for company in short_recommendations:
+                text_summary += f"  #{company['rank']}. {company['ticker']} - {company['rating']}\n"
+                roe_val = company.get('roe') or 0
+                pe_val = company.get('pe_ratio') or 0
+                text_summary += f"      Price: ${company['price']:.2f} | ROE: {roe_val:.1f}% | P/E: {pe_val:.1f}\n"
+                text_summary += f"      Rationale: {company['rationale']}\n\n"
+
+            text_summary += f"\nSUMMARY:\n"
+            text_summary += f"  Total companies evaluated: {len(scored_companies)}\n"
+            long_roe_vals = [c['roe'] for c in long_recommendations if c.get('roe')]
+            short_roe_vals = [c['roe'] for c in short_recommendations if c.get('roe')]
+            text_summary += f"  Average ROE (Long): {np.mean(long_roe_vals):.1f}% ({len(long_roe_vals)} companies)\n" if long_roe_vals else "  Average ROE (Long): N/A\n"
+            text_summary += f"  Average ROE (Short): {np.mean(short_roe_vals):.1f}% ({len(short_roe_vals)} companies)\n" if short_roe_vals else "  Average ROE (Short): N/A\n"
+
+            # Create visualization automatically
+            import os
+            import uuid
+            from datetime import datetime
+
+            viz_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "visualizations")
+            os.makedirs(viz_dir, exist_ok=True)
+
+            viz_id = f"viz_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+            viz_config = {
+                "type": "portfolio_recommendation",
+                "id": viz_id,
+                "title": f"Long/Short Portfolio Recommendations ({strategy.capitalize()} Strategy)",
+                "long_positions": long_recommendations,
+                "short_positions": short_recommendations
+            }
+
+            viz_file = os.path.join(viz_dir, f"{viz_id}.json")
+            with open(viz_file, 'w') as f:
+                import json as json_module
+                json_module.dump(viz_config, f, indent=2)
+
+            text_summary += f"\nA portfolio recommendation visualization has been created (Visualization ID: {viz_id}).\n"
 
             result = {
                 "success": True,
@@ -106,7 +178,9 @@ class PortfolioRecommendationTool(BaseTool):
                     "avg_score_short": np.mean([c['score'] for c in short_recommendations]),
                     "avg_roe_long": np.mean([c['roe'] for c in long_recommendations if c['roe']]),
                     "avg_roe_short": np.mean([c['roe'] for c in short_recommendations if c['roe']])
-                }
+                },
+                "text_summary": text_summary,
+                "visualization_id": viz_id
             }
 
             return json.dumps(result, indent=2)

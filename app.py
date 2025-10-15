@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from agents import run_analysis
-from utils import get_data_summary, get_column_descriptions
+from utils import get_data_summary, get_column_descriptions, get_firm_data_summary, get_firm_column_descriptions
 
 # Page configuration
 st.set_page_config(
@@ -701,6 +701,53 @@ def render_portfolio_recommendation(config: dict):
     long_positions = config["long_positions"]
     short_positions = config["short_positions"]
 
+    # Display recommendation summary table
+    st.markdown("### Portfolio Recommendations Summary")
+
+    def color_rating(rating):
+        """Return colored HTML for rating."""
+        colors = {
+            "Strong Buy": "#00C851",  # Green
+            "Buy": "#4CAF50",         # Light Green
+            "Hold": "#FFC107",        # Amber
+            "Sell": "#FF5722",        # Deep Orange
+            "Strong Sell": "#F44336"  # Red
+        }
+        color = colors.get(rating, "#757575")
+        return f'<span style="color: {color}; font-weight: bold;">{rating}</span>'
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**🟢 Long Positions**")
+        for i, p in enumerate(long_positions):
+            roe_val = f"{p.get('roe', 0):.1f}%" if p.get('roe') else "N/A"
+            pe_val = f"{p.get('pe_ratio', 0):.1f}" if p.get('pe_ratio') else "N/A"
+            rating_html = color_rating(p.get('rating', 'N/A'))
+
+            st.markdown(f"""
+            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #4CAF50; background-color: var(--secondary-background-color);">
+                <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> - {rating_html}<br>
+                <small>ROE: {roe_val} | P/E: {pe_val}</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("**🔴 Short Positions**")
+        for i, p in enumerate(short_positions):
+            roe_val = f"{p.get('roe', 0):.1f}%" if p.get('roe') else "N/A"
+            pe_val = f"{p.get('pe_ratio', 0):.1f}" if p.get('pe_ratio') else "N/A"
+            rating_html = color_rating(p.get('rating', 'N/A'))
+
+            st.markdown(f"""
+            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #F44336; background-color: var(--secondary-background-color);">
+                <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> - {rating_html}<br>
+                <small>ROE: {roe_val} | P/E: {pe_val}</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
     # Create subplots for metrics
     fig = make_subplots(
         rows=3, cols=1,
@@ -793,7 +840,26 @@ def render_portfolio_recommendation(config: dict):
 def extract_visualization_ids(response: str) -> list:
     """Extract visualization IDs from agent response."""
     import re
+    import glob
+    from datetime import datetime, timedelta
+
+    # First, try to extract from response text
     viz_ids = re.findall(r'viz_\d{8}_\d{6}_[a-f0-9]{8}', response)
+
+    # Fallback: Check for recently created visualization files (within last 30 seconds)
+    # This handles cases where the agent doesn't include the exact ID text
+    viz_dir = os.path.join(os.path.dirname(__file__), "visualizations")
+    if os.path.exists(viz_dir):
+        now = datetime.now().timestamp()
+        recent_files = []
+        for viz_file in glob.glob(os.path.join(viz_dir, "viz_*.json")):
+            file_age = now - os.path.getmtime(viz_file)
+            if file_age < 30:  # Created within last 30 seconds
+                viz_id = os.path.basename(viz_file).replace('.json', '')
+                if viz_id not in viz_ids:
+                    recent_files.append(viz_id)
+        viz_ids.extend(recent_files)
+
     return list(set(viz_ids))
 
 
@@ -803,6 +869,7 @@ with st.sidebar:
 
     with st.expander("📈 Dataset Information"):
         data_summary = get_data_summary()
+        firm_summary = get_firm_data_summary()
 
         st.markdown("**Macro Factors**")
         st.markdown(f"- **Date Range:** {data_summary['macro_factors']['date_range']['start']} to {data_summary['macro_factors']['date_range']['end']}")
@@ -814,8 +881,15 @@ with st.sidebar:
         st.markdown(f"- **Records:** {data_summary['market_factors']['rows']:,}")
         st.markdown(f"- **Indicators:** {len(data_summary['market_factors']['columns'])}")
 
+        st.markdown("**Company Fundamentals**")
+        st.markdown(f"- **Date Range:** {firm_summary['date_range']['start']} to {firm_summary['date_range']['end']}")
+        st.markdown(f"- **Records:** {firm_summary['total_records']:,}")
+        st.markdown(f"- **Companies:** {firm_summary['unique_tickers']}")
+        st.markdown(f"- **Metrics:** EPS, ROE, ROA, P/E, Margins, Growth")
+
     with st.expander("📋 Available Indicators"):
         descriptions = get_column_descriptions()
+        firm_descriptions = get_firm_column_descriptions()
 
         st.markdown("**Macroeconomic Indicators:**")
         for indicator, desc in descriptions["macro_factors"].items():
@@ -825,6 +899,14 @@ with st.sidebar:
         for indicator, desc in descriptions["market_factors"].items():
             if indicator != "Headlines":
                 st.markdown(f"- **{indicator}**: {desc}")
+
+        st.markdown("\n**Company Fundamental Metrics:**")
+        # Show key metrics only (not all the forward growth/volatility variants)
+        key_metrics = ["TICKER", "STATPERS", "PRICE", "EBS", "EPS", "DPS", "ROA", "ROE", "NAV", "GRM"]
+        for metric in key_metrics:
+            if metric in firm_descriptions:
+                st.markdown(f"- **{metric}**: {firm_descriptions[metric]}")
+        st.markdown("- Plus forward 1-year growth and volatility estimates for all metrics")
 
     st.markdown("---")
 
@@ -874,7 +956,7 @@ with st.sidebar:
         - Analyze the relationship between interest rates and inflation
         """)
 
-	 with st.expander("📈 Portfolio Recommendations"):
+    with st.expander("📈 Portfolio Recommendations"):
         st.markdown("""
         - Recommend a balanced long/short portfolio of 5 stocks each
         - Which companies should I long based on value strategy?
@@ -893,7 +975,7 @@ with st.sidebar:
         - How does AAPL's ROE correlate with the Fed Funds rate?
         """)
 
-	with st.expander("📰 News & Events"):
+    with st.expander("📰 News & Events"):
         st.markdown("""
         - What were the most popular news on January 22nd, 2012?
         - Show me headlines from the 2008 financial crisis

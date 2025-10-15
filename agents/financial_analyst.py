@@ -109,7 +109,7 @@ def create_financial_analyst_agent():
         CompanyComparisonChartTool(),
         FundamentalTimeSeriesPlotTool(),
         ValuationScatterPlotTool(),
-        PortfolioRecommendationChartTool(),
+        # Note: PortfolioRecommendationTool creates visualizations automatically
     ]
 
     # Create agent
@@ -188,7 +188,11 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             "   - Use FundamentalTimeSeriesPlotTool to show evolution of company metrics over time\n"
             "5. For portfolio recommendations:\n"
             "   - Use PortfolioRecommendationTool with strategy parameter ('value', 'growth', 'quality', or 'balanced')\n"
-            "   - Visualize recommendations with PortfolioRecommendationChartTool\n"
+            "   - The tool automatically creates a visualization and returns detailed recommendations\n"
+            "   - IMPORTANT: When the tool outputs a Visualization ID (viz_YYYYMMDD_HHMMSS_XXXXXXXX), you MUST include this EXACT text in your response\n"
+            "   - Copy the complete 'Visualization ID: viz_...' line from the tool output into your response\n"
+            "   - Each recommendation includes score, metrics (ROE, P/E), and rationale\n"
+            "   - Present the recommendations clearly and explain the strategy logic\n"
             "   - Explain rationale based on fundamentals and macro context\n"
             "6. Provide a comprehensive, well-structured answer with:\n"
             "   - Key findings and insights\n"
