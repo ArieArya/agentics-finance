@@ -6,6 +6,9 @@ import streamlit as st
 import os
 import json
 import glob
+import re
+import sys
+from io import StringIO
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -73,6 +76,17 @@ st.markdown("""
         border-left: 4px solid #1f77b4;
         margin-bottom: 1rem;
     }
+
+    /* Allow sidebar to be resized larger (up to 60% of page width) */
+    [data-testid="stSidebar"] {
+        min-width: 300px;
+        max-width: 60% !important;
+    }
+
+    /* Ensure sidebar content is scrollable when extended */
+    [data-testid="stSidebar"] > div:first-child {
+        overflow-y: auto;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,6 +99,12 @@ if "current_visualizations" not in st.session_state:
 
 if "clear_input" not in st.session_state:
     st.session_state.clear_input = False
+
+if "agent_logs" not in st.session_state:
+    st.session_state.agent_logs = ""
+
+if "show_logs" not in st.session_state:
+    st.session_state.show_logs = True
 
 
 def clean_old_visualizations():
@@ -837,6 +857,49 @@ def render_portfolio_recommendation(config: dict):
     st.plotly_chart(fig, use_container_width=True)
 
 
+def run_analysis_with_logs(user_input: str, conversation_history: list) -> str:
+    """Run analysis and capture stdout/stderr to display in logs."""
+    # Create a StringIO object to capture output
+    captured_output = StringIO()
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+
+    try:
+        # Redirect stdout and stderr to capture output
+        sys.stdout = captured_output
+        sys.stderr = captured_output
+
+        # Run the analysis
+        response = run_analysis(user_input, conversation_history)
+
+        # Restore original stdout/stderr
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
+
+        # Get captured output and clean ANSI escape codes
+        raw_logs = captured_output.getvalue()
+        # Remove ANSI color codes (e.g., [36m, [0m, [1;36m, etc.)
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+        cleaned_logs = ansi_escape.sub('', raw_logs)
+
+        # Store the cleaned logs in session state
+        st.session_state.agent_logs = cleaned_logs
+
+        return response
+
+    except Exception as e:
+        # Restore original stdout/stderr in case of error
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
+
+        # Clean and store what we captured plus the error
+        raw_logs = captured_output.getvalue()
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+        cleaned_logs = ansi_escape.sub('', raw_logs)
+        st.session_state.agent_logs = cleaned_logs + f"\n\nError: {str(e)}"
+        raise e
+
+
 def extract_visualization_ids(response: str) -> list:
     """Extract visualization IDs from agent response."""
     import re
@@ -913,6 +976,7 @@ with st.sidebar:
     if st.button("🗑️ Clear Conversation"):
         st.session_state.messages = []
         st.session_state.current_visualizations = []
+        st.session_state.agent_logs = ""
         clean_old_visualizations()
         st.rerun()
 
@@ -983,6 +1047,24 @@ with st.sidebar:
         - Create a timeline of significant market events from 2020-2022
         """)
 
+# Agent Logs Sidebar (Left) - Always visible
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("#### 🔍 Agent Thought Process")
+    st.caption("View the agent's reasoning and tool calls in real-time")
+
+    if st.session_state.agent_logs:
+        # Show logs in expandable section
+        with st.expander("📜 View Agent Logs", expanded=st.session_state.show_logs):
+            st.code(st.session_state.agent_logs, language="text")
+
+        # Toggle button to collapse/expand
+        if st.button("↕️ Toggle Logs"):
+            st.session_state.show_logs = not st.session_state.show_logs
+            st.rerun()
+    else:
+        st.info("💡 Agent logs will appear here once you ask a question. You'll be able to see the agent's tool usage, reasoning process, and decision-making in real-time!")
+
 # Main content
 st.markdown('<div class="main-header">Financial Data Analyst</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Ask questions about macroeconomic data, market factors, and company fundamentals from 2008 to present</div>', unsafe_allow_html=True)
@@ -1037,8 +1119,8 @@ if submit_button and user_input:
     # Show loading state
     with st.spinner("Thinking..."):
         try:
-            # Run analysis with conversation history for context
-            response = run_analysis(user_input, st.session_state.messages)
+            # Run analysis with conversation history for context and capture logs
+            response = run_analysis_with_logs(user_input, st.session_state.messages)
 
             # Extract visualization IDs from response
             viz_ids = extract_visualization_ids(response)
