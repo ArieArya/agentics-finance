@@ -57,6 +57,22 @@ from .fundamental_visualization_tools import (
     ValuationScatterPlotTool,
     PortfolioRecommendationChartTool
 )
+from .dj30_price_tools import (
+    ReturnsAnalysisTool as DJ30ReturnsAnalysisTool,
+    VolatilityAnalysisTool as DJ30VolatilityAnalysisTool,
+    PerformanceComparisonTool,
+    PriceRangeAnalysisTool
+)
+from .dj30_portfolio_tools import (
+    VolatilityBasedPortfolioTool,
+    MomentumBasedPortfolioTool,
+    SectorDiversifiedPortfolioTool
+)
+from .dj30_visualization_tools import (
+    PriceChartTool,
+    PerformanceComparisonChartTool,
+    VolatilityChartTool
+)
 
 __all__ = [
     # Data query tools
@@ -106,5 +122,18 @@ __all__ = [
     'FundamentalTimeSeriesPlotTool',
     'ValuationScatterPlotTool',
     'PortfolioRecommendationChartTool',
+    # DJ30 price analysis tools
+    'DJ30ReturnsAnalysisTool',
+    'DJ30VolatilityAnalysisTool',
+    'PerformanceComparisonTool',
+    'PriceRangeAnalysisTool',
+    # DJ30 portfolio tools
+    'VolatilityBasedPortfolioTool',
+    'MomentumBasedPortfolioTool',
+    'SectorDiversifiedPortfolioTool',
+    # DJ30 visualization tools
+    'PriceChartTool',
+    'PerformanceComparisonChartTool',
+    'VolatilityChartTool',
 ]
 

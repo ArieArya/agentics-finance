@@ -42,6 +42,16 @@ from tools import (
     FundamentalTimeSeriesPlotTool,
     ValuationScatterPlotTool,
     PortfolioRecommendationChartTool,
+    DJ30ReturnsAnalysisTool,
+    DJ30VolatilityAnalysisTool,
+    PerformanceComparisonTool,
+    PriceRangeAnalysisTool,
+    VolatilityBasedPortfolioTool,
+    MomentumBasedPortfolioTool,
+    SectorDiversifiedPortfolioTool,
+    PriceChartTool,
+    PerformanceComparisonChartTool,
+    VolatilityChartTool,
 )
 import os
 from dotenv import load_dotenv
@@ -109,7 +119,20 @@ def create_financial_analyst_agent():
         CompanyComparisonChartTool(),
         FundamentalTimeSeriesPlotTool(),
         ValuationScatterPlotTool(),
-        # Note: PortfolioRecommendationTool creates visualizations automatically
+        # DJ30 price analysis tools
+        DJ30ReturnsAnalysisTool(),
+        DJ30VolatilityAnalysisTool(),
+        PerformanceComparisonTool(),
+        PriceRangeAnalysisTool(),
+        # DJ30 portfolio construction tools
+        VolatilityBasedPortfolioTool(),
+        MomentumBasedPortfolioTool(),
+        SectorDiversifiedPortfolioTool(),
+        # DJ30 visualization tools
+        PriceChartTool(),
+        PerformanceComparisonChartTool(),
+        VolatilityChartTool(),
+        # Note: PortfolioRecommendationTool and DJ30 portfolio tools create visualizations automatically
     ]
 
     # Create agent
@@ -126,11 +149,13 @@ def create_financial_analyst_agent():
             "1) Macroeconomic indicators (Fed Funds Rate, CPI, unemployment, retail sales, etc.) "
             "2) Market factors (S&P 500, VIX, Bitcoin, gold, oil prices, Treasury yields, etc.) "
             "3) Company fundamentals (61 publicly traded companies with EPS, ROE, ROA, P/E ratios, margins, etc.) "
+            "4) DJ30 stock price data (30 Dow Jones Industrial Average stocks with daily OHLCV data from 2008-2025) "
             "All data spans from 2008 to present. "
             "You excel at identifying trends, correlations, anomalies, and investment opportunities. "
             "You can analyze company fundamentals, compare valuations, screen for opportunities, "
             "and generate long/short portfolio recommendations based on fundamental strength, "
-            "macro context, and relative valuations. "
+            "macro context, and relative valuations. You also specialize in technical analysis, "
+            "price momentum strategies, volatility-based trading, and quantitative portfolio construction. "
             "When users ask questions, you use your tools to query data, perform analysis, "
             "and create visualizations to support your insights. You always provide context "
             "and explain your findings in clear, accessible language."
@@ -177,30 +202,40 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             "3. Choose the right tools for the task:\n"
             "   - For MARKET/MACRO VISUALIZATIONS: Use market visualization tools DIRECTLY (they load data themselves)\n"
             "   - For COMPANY COMPARISONS: Use CompanyComparisonChartTool for side-by-side fundamental metrics\n"
-            "   - For PORTFOLIO RECOMMENDATIONS: Use PortfolioRecommendationTool + PortfolioRecommendationChartTool\n"
+            "   - For PORTFOLIO RECOMMENDATIONS (fundamentals-based): Use PortfolioRecommendationTool\n"
             "   - For COMPANY ANALYSIS: Use CompanyFundamentalsQueryTool, CompanyValuationTool, FundamentalHistoryTool\n"
             "   - For SCREENING: Use ScreenCompaniesTool to filter companies by criteria\n"
+            "   - For DJ30 PRICE ANALYSIS: Use DJ30ReturnsAnalysisTool, DJ30VolatilityAnalysisTool, PriceRangeAnalysisTool\n"
+            "   - For DJ30 PRICE CHARTS: Use PriceChartTool (candlestick/OHLC), PerformanceComparisonChartTool, VolatilityChartTool\n"
+            "   - For DJ30 PORTFOLIOS: Use VolatilityBasedPortfolioTool, MomentumBasedPortfolioTool, SectorDiversifiedPortfolioTool\n"
             "   - For SPECIFIC DATA VALUES: Use analysis tools or data query tools\n"
             "   - DO NOT query data before creating visualizations (it creates token overload)\n"
             "4. When working with company fundamentals:\n"
             "   - Compare companies using CompareFundamentalsTool for analysis, CompanyComparisonChartTool for visualization\n"
             "   - Use ValuationScatterPlotTool to show relationships between metrics (e.g., ROE vs P/E)\n"
             "   - Use FundamentalTimeSeriesPlotTool to show evolution of company metrics over time\n"
-            "5. For portfolio recommendations:\n"
-            "   - Use PortfolioRecommendationTool with strategy parameter ('value', 'growth', 'quality', or 'balanced')\n"
-            "   - The tool automatically creates a visualization and returns detailed recommendations\n"
+            "5. When working with DJ30 stock prices:\n"
+            "   - Use DJ30 tools for questions about specific stock prices, returns, volatility, or price patterns\n"
+            "   - For volatility-based portfolios: Use VolatilityBasedPortfolioTool (automatically creates visualization)\n"
+            "   - For momentum strategies: Use MomentumBasedPortfolioTool (automatically creates visualization)\n"
+            "   - For sector diversification: Use SectorDiversifiedPortfolioTool (automatically creates visualization)\n"
+            "   - Example: 'long 5 most volatile, short 5 least volatile' → Use VolatilityBasedPortfolioTool\n"
+            "   - IMPORTANT: DJ30 portfolio tools automatically create visualizations and return Visualization IDs\n"
+            "   - Always include the Visualization ID in your response when one is generated\n"
+            "6. For portfolio recommendations:\n"
+            "   - Use PortfolioRecommendationTool for fundamentals-based recommendations (value, growth, quality, balanced)\n"
+            "   - Use DJ30 portfolio tools for price/technical-based recommendations (volatility, momentum, sector)\n"
+            "   - These tools automatically create visualizations and return detailed recommendations\n"
             "   - IMPORTANT: When the tool outputs a Visualization ID (viz_YYYYMMDD_HHMMSS_XXXXXXXX), you MUST include this EXACT text in your response\n"
             "   - Copy the complete 'Visualization ID: viz_...' line from the tool output into your response\n"
-            "   - Each recommendation includes score, metrics (ROE, P/E), and rationale\n"
             "   - Present the recommendations clearly and explain the strategy logic\n"
-            "   - Explain rationale based on fundamentals and macro context\n"
-            "6. Provide a comprehensive, well-structured answer with:\n"
+            "7. Provide a comprehensive, well-structured answer with:\n"
             "   - Key findings and insights\n"
             "   - Statistical evidence and data points\n"
             "   - Context and interpretation\n"
             "   - Any relevant visualizations created\n"
-            "7. Be specific with dates, values, and indicators/tickers\n"
-            "8. If you create visualizations, mention the visualization IDs in your response\n"
+            "8. Be specific with dates, values, and indicators/tickers\n"
+            "9. If you create visualizations, mention the visualization IDs in your response\n"
         ),
         agent=agent,
         expected_output=(

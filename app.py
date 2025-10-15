@@ -16,7 +16,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from agents import run_analysis
-from utils import get_data_summary, get_column_descriptions, get_firm_data_summary, get_firm_column_descriptions
+from utils import get_data_summary, get_column_descriptions, get_firm_data_summary, get_firm_column_descriptions, get_dj30_data_summary, get_dj30_column_descriptions
 
 # Page configuration
 st.set_page_config(
@@ -180,6 +180,18 @@ def load_visualization(viz_id: str):
             render_valuation_scatter(viz_config)
         elif viz_type == "portfolio_recommendation":
             render_portfolio_recommendation(viz_config)
+        elif viz_type == "price_chart":
+            render_price_chart(viz_config)
+        elif viz_type == "performance_comparison":
+            render_performance_comparison(viz_config)
+        elif viz_type == "volatility_chart":
+            render_volatility_chart(viz_config)
+        elif viz_type == "volatility_portfolio":
+            render_volatility_portfolio(viz_config)
+        elif viz_type == "momentum_portfolio":
+            render_momentum_portfolio(viz_config)
+        elif viz_type == "sector_portfolio":
+            render_sector_portfolio(viz_config)
         else:
             st.warning(f"Unknown visualization type: {viz_type}")
     except Exception as e:
@@ -857,6 +869,288 @@ def render_portfolio_recommendation(config: dict):
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_price_chart(config: dict):
+    """Render DJ30 price chart (candlestick, line, or OHLC)."""
+    df = pd.DataFrame(config["data"])
+    df['date'] = pd.to_datetime(df['date'])
+
+    chart_type = config.get("chart_type", "candlestick")
+    include_volume = config.get("include_volume", True)
+
+    if include_volume:
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.03,
+            row_heights=[0.7, 0.3],
+            subplot_titles=("Price", "Volume")
+        )
+    else:
+        fig = go.Figure()
+
+    # Add price trace
+    if chart_type == "candlestick":
+        trace = go.Candlestick(
+            x=df['date'],
+            open=df['open'],
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            name="Price"
+        )
+    elif chart_type == "ohlc":
+        trace = go.Ohlc(
+            x=df['date'],
+            open=df['open'],
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            name="Price"
+        )
+    else:  # line
+        trace = go.Scatter(
+            x=df['date'],
+            y=df['close'],
+            mode='lines',
+            name="Price",
+            line=dict(color="#1f77b4")
+        )
+
+    if include_volume:
+        fig.add_trace(trace, row=1, col=1)
+        # Add volume trace
+        fig.add_trace(
+            go.Bar(x=df['date'], y=df['volume'], name="Volume", marker_color="#A9A9A9"),
+            row=2, col=1
+        )
+    else:
+        fig.add_trace(trace)
+
+    fig.update_layout(
+        title=config["title"],
+        xaxis_rangeslider_visible=False,
+        height=600
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_performance_comparison(config: dict):
+    """Render DJ30 performance comparison chart."""
+    series = config["series"]
+
+    fig = go.Figure()
+
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+
+    for i, (ticker, data) in enumerate(series.items()):
+        df = pd.DataFrame(data)
+        df['date'] = pd.to_datetime(df['date'])
+
+        fig.add_trace(go.Scatter(
+            x=df['date'],
+            y=df['value'],
+            mode='lines',
+            name=ticker,
+            line=dict(color=colors[i % len(colors)])
+        ))
+
+    ylabel = "Normalized Price (Base=100)" if config.get("normalized", False) else "Price ($)"
+
+    fig.update_layout(
+        title=config["title"],
+        xaxis_title="Date",
+        yaxis_title=ylabel,
+        hovermode="x unified",
+        height=500,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_volatility_chart(config: dict):
+    """Render DJ30 rolling volatility chart."""
+    df = pd.DataFrame(config["data"])
+    df['date'] = pd.to_datetime(df['date'])
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=df['date'],
+        y=df['volatility'],
+        mode='lines',
+        name=f"{config['window']}-day Rolling Volatility",
+        line=dict(color="#ff7f0e"),
+        fill='tozeroy'
+    ))
+
+    fig.update_layout(
+        title=config["title"],
+        xaxis_title="Date",
+        yaxis_title="Annualized Volatility (%)",
+        hovermode="x unified",
+        height=500
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_volatility_portfolio(config: dict):
+    """Render volatility-based portfolio recommendations."""
+    long_positions = config["long_positions"]
+    short_positions = config["short_positions"]
+
+    st.markdown("### Volatility-Based Portfolio: Long/Short Strategy")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**🟢 Long Positions (High Volatility)**")
+        for i, p in enumerate(long_positions):
+            st.markdown(f"""
+            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #4CAF50; background-color: var(--secondary-background-color);">
+                <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> ({p.get('sector', 'N/A')})<br>
+                <small>Vol: {p.get('volatility', 0):.2f}% | Return: {p.get('annualized_return', 0):+.2f}%</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("**🔴 Short Positions (Low Volatility)**")
+        for i, p in enumerate(short_positions):
+            st.markdown(f"""
+            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #F44336; background-color: var(--secondary-background-color);">
+                <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> ({p.get('sector', 'N/A')})<br>
+                <small>Vol: {p.get('volatility', 0):.2f}% | Return: {p.get('annualized_return', 0):+.2f}%</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Create volatility comparison bar chart
+    tickers = [p['ticker'] for p in long_positions] + [p['ticker'] for p in short_positions]
+    volatilities = [p['volatility'] for p in long_positions] + [p['volatility'] for p in short_positions]
+    colors = ['#4CAF50'] * len(long_positions) + ['#F44336'] * len(short_positions)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=tickers,
+        y=volatilities,
+        marker_color=colors,
+        text=[f"{v:.1f}%" for v in volatilities],
+        textposition='outside'
+    ))
+
+    fig.update_layout(
+        title="Volatility Comparison",
+        xaxis_title="Ticker",
+        yaxis_title="Annualized Volatility (%)",
+        height=400
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_momentum_portfolio(config: dict):
+    """Render momentum-based portfolio recommendations."""
+    long_positions = config["long_positions"]
+    short_positions = config["short_positions"]
+
+    st.markdown("### Momentum-Based Portfolio: Long/Short Strategy")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**🟢 Long Positions (High Momentum)**")
+        for i, p in enumerate(long_positions):
+            st.markdown(f"""
+            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #4CAF50; background-color: var(--secondary-background-color);">
+                <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> ({p.get('sector', 'N/A')})<br>
+                <small>Momentum: {p.get('momentum', 0):+.2f}% | Vol: {p.get('volatility', 0):.2f}%</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("**🔴 Short Positions (Low Momentum)**")
+        for i, p in enumerate(short_positions):
+            st.markdown(f"""
+            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #F44336; background-color: var(--secondary-background-color);">
+                <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> ({p.get('sector', 'N/A')})<br>
+                <small>Momentum: {p.get('momentum', 0):+.2f}% | Vol: {p.get('volatility', 0):.2f}%</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Create momentum comparison bar chart
+    tickers = [p['ticker'] for p in long_positions] + [p['ticker'] for p in short_positions]
+    momentum = [p['momentum'] for p in long_positions] + [p['momentum'] for p in short_positions]
+    colors = ['#4CAF50'] * len(long_positions) + ['#F44336'] * len(short_positions)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=tickers,
+        y=momentum,
+        marker_color=colors,
+        text=[f"{m:+.1f}%" for m in momentum],
+        textposition='outside'
+    ))
+
+    fig.update_layout(
+        title="Momentum Comparison",
+        xaxis_title="Ticker",
+        yaxis_title="Cumulative Return (%)",
+        height=400
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_sector_portfolio(config: dict):
+    """Render sector-diversified portfolio."""
+    positions = config["positions"]
+
+    st.markdown("### Sector-Diversified Portfolio")
+
+    # Group by sector
+    sectors = {}
+    for p in positions:
+        sector = p.get('sector', 'Unknown')
+        if sector not in sectors:
+            sectors[sector] = []
+        sectors[sector].append(p)
+
+    # Display by sector
+    for sector, stocks in sectors.items():
+        st.markdown(f"**{sector}**")
+        for p in stocks:
+            st.markdown(f"""
+            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #2196F3; background-color: var(--secondary-background-color);">
+                <strong>{p['ticker']}</strong><br>
+                <small>Return: {p.get('total_return', 0):+.2f}% | Sharpe: {p.get('sharpe_ratio', 0):.2f}</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Create sector allocation pie chart
+    sector_counts = {sector: len(stocks) for sector, stocks in sectors.items()}
+
+    fig = go.Figure()
+    fig.add_trace(go.Pie(
+        labels=list(sector_counts.keys()),
+        values=list(sector_counts.values()),
+        hole=0.3
+    ))
+
+    fig.update_layout(
+        title="Sector Allocation",
+        height=400
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def run_analysis_with_logs(user_input: str, conversation_history: list) -> str:
     """Run analysis and capture stdout/stderr to display in logs."""
     # Create a StringIO object to capture output
@@ -933,6 +1227,7 @@ with st.sidebar:
     with st.expander("📈 Dataset Information"):
         data_summary = get_data_summary()
         firm_summary = get_firm_data_summary()
+        dj30_summary = get_dj30_data_summary()
 
         st.markdown("**Macro Factors**")
         st.markdown(f"- **Date Range:** {data_summary['macro_factors']['date_range']['start']} to {data_summary['macro_factors']['date_range']['end']}")
@@ -950,9 +1245,12 @@ with st.sidebar:
         st.markdown(f"- **Companies:** {firm_summary['unique_tickers']}")
         st.markdown(f"- **Metrics:** EPS, ROE, ROA, P/E, Margins, Growth")
 
+        st.markdown(dj30_summary)
+
     with st.expander("📋 Available Indicators"):
         descriptions = get_column_descriptions()
         firm_descriptions = get_firm_column_descriptions()
+        dj30_descriptions = get_dj30_column_descriptions()
 
         st.markdown("**Macroeconomic Indicators:**")
         for indicator, desc in descriptions["macro_factors"].items():
@@ -970,6 +1268,12 @@ with st.sidebar:
             if metric in firm_descriptions:
                 st.markdown(f"- **{metric}**: {firm_descriptions[metric]}")
         st.markdown("- Plus forward 1-year growth and volatility estimates for all metrics")
+
+        st.markdown("\n**DJ30 Stock Price Data:**")
+        for category, metrics in dj30_descriptions.items():
+            st.markdown(f"\n*{category}:*")
+            for metric in metrics:
+                st.markdown(f"  {metric}")
 
     st.markdown("---")
 
@@ -1027,6 +1331,25 @@ with st.sidebar:
         - Generate growth-focused portfolio recommendations
         - What are the best quality companies to invest in right now?
         - Compare portfolio recommendations: value vs growth strategies
+        """)
+
+    with st.expander("📊 DJ30 Portfolio Strategies"):
+        st.markdown("""
+        - Create a portfolio going long 5 most volatile stocks and short 5 least volatile stocks in the past year
+        - Build a momentum-based portfolio with top 5 gainers and bottom 5 losers from 2023
+        - Construct a sector-diversified portfolio with best stock from each sector
+        - Which DJ30 stocks had the highest volatility in 2024?
+        - Show me performance comparison of all tech stocks in DJ30 from 2020-2024
+        """)
+
+    with st.expander("💹 DJ30 Stock Analysis"):
+        st.markdown("""
+        - Show me a candlestick chart for AAPL from 2023 to 2024
+        - Compare price performance of AAPL, MSFT, and GOOGL over the past year
+        - What was the volatility of AAPL during 2020?
+        - Analyze returns for MSFT from 2020 to 2023
+        - Create a volatility chart for NVDA showing rolling 30-day volatility
+        - What was the price range for JPM in 2022?
         """)
 
     with st.expander("💼 Company Fundamentals"):
