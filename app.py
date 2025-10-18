@@ -1381,10 +1381,6 @@ with st.sidebar:
         with st.expander("📜 View Agent Logs", expanded=st.session_state.show_logs):
             st.code(st.session_state.agent_logs, language="text")
 
-        # Toggle button to collapse/expand
-        if st.button("↕️ Toggle Logs"):
-            st.session_state.show_logs = not st.session_state.show_logs
-            st.rerun()
     else:
         st.info("💡 Agent logs will appear here once you ask a question. You'll be able to see the agent's tool usage, reasoning process, and decision-making in real-time!")
 
