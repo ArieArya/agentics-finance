@@ -391,3 +391,4 @@ class FundamentalHistoryTool(BaseTool):
                 "error": str(e)
             })
 
+

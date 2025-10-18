@@ -9,7 +9,7 @@ authors = [
     { name = "Mustafa Eyceoz", email = "Mustafa.Eyceoz@partner.ibm.com" },
     { name = "Naweed Aghmad Khan", email = "naweed.khan@ibm.com" },
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.13"
 readme = "README.md"
 license = "Apache-2.0"
 dependencies = [
@@ -34,12 +34,17 @@ dependencies = [
     "numerize>=0.12",
 ]
 
+
+
 [tool.uv]
 package = true
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentics"]
@@ -86,7 +91,7 @@ testpaths = ["tests"]
 addopts = "--html=report.html --self-contained-html"
 
 [tool.codespell]
-ignore-words-list = "ans"
+ignore-words-list = ["ans" , "AGs"]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
