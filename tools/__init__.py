@@ -73,6 +73,9 @@ from .dj30_visualization_tools import (
     PerformanceComparisonChartTool,
     VolatilityChartTool
 )
+from .agentics_generic_tools import (
+    MacroTransductionTool
+)
 
 __all__ = [
     # Data query tools
@@ -135,5 +138,7 @@ __all__ = [
     'PriceChartTool',
     'PerformanceComparisonChartTool',
     'VolatilityChartTool',
+	# Transduction tools
+	'MacroTransductionTool',
 ]
 

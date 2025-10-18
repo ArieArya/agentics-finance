@@ -343,3 +343,4 @@ class PriceRangeAnalysisTool(BaseTool):
         return json.dumps(result, indent=2)
 
 
+
