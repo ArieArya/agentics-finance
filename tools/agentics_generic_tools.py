@@ -31,43 +31,78 @@ A detailed Markdown Document reporting evidence for the above answer
 class TransductionInput(BaseModel):
     """Input schema for TransductionTool."""
     question: str = Field(..., description="The question to answer")
+    dataset: str = Field(
+        ...,
+        description="Dataset to analyze. Must be one of: 'macro' (macroeconomic indicators), 'market' (market data & indices), 'dj30' (DJ30 stock prices)"
+    )
     start_date: str = Field(..., description="The start date of the data to use for the answer (YYYY-MM-DD)")
     end_date: str = Field(..., description="The end date of the data to use for the answer (YYYY-MM-DD)")
 
 
-class MacroTransductionTool(BaseTool):
-    name: str = "Macro Transduction Analysis"
+class UnifiedTransductionTool(BaseTool):
+    name: str = "Advanced Transduction Analysis"
     description: str = (
-        "Answers complex macroeconomics questions that other tools cannot answer using the agentics framework. "
+        "Answers complex financial questions that other tools cannot answer using the agentics framework. "
         "This tool performs deep analysis by reducing large datasets into meaningful insights. "
         "Use this tool when you need comprehensive analysis across a date range that requires "
-        "synthesizing information from multiple data points. "
-        "Input should include: question (str), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)."
+        "synthesizing information from multiple data points that standard tools cannot handle. "
+        "\n\nSupported datasets:\n"
+        "- 'macro': Macroeconomic indicators (FEDFUNDS, CPI, UNRATE, etc.)\n"
+        "- 'market': Market data & indices (S&P 500, VIX, BTC, Gold, etc.)\n"
+        "- 'dj30': DJ30 stock prices (OHLCV data for 30 Dow Jones companies)\n"
+        "\n\nInput format: question (str), dataset (str), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)\n"
+        "Note: Limited to 500 rows per analysis."
     )
     args_schema: Type[BaseModel] = TransductionInput
 
-    def _run(self, question: str, start_date: str, end_date: str) -> str:
+    def _run(self, question: str, dataset: str, start_date: str, end_date: str) -> str:
         try:
-            logger.info(f"Starting Macro Transduction Analysis for question: '{question}'")
+            logger.info(f"Starting Transduction Analysis for question: '{question}'")
+            logger.info(f"Dataset: {dataset}")
             logger.info(f"Date range: {start_date} to {end_date}")
 
-            # Get the absolute path to the CSV file
-            csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "macro_factors_new.csv")
+            # Map dataset names to CSV files and their date columns
+            dataset_mapping = {
+                "macro": {"file": "macro_factors_new.csv"},
+                "market": {"file": "market_factors_new.csv"},
+                "dj30": {"file": "dj30_data_full.csv"},
+            }
+
+            # Validate dataset parameter
+            if dataset not in dataset_mapping:
+                logger.error(f"Invalid dataset: {dataset}")
+                return json.dumps({
+                    "success": False,
+                    "error": f"Invalid dataset '{dataset}'. Must be one of: {list(dataset_mapping.keys())}"
+                }, indent=2)
+
+            # Get the absolute path to the CSV file and date column name
+            csv_filename = dataset_mapping[dataset]["file"]
+            date_column = "Date"
+            csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", csv_filename)
+
+            if not os.path.exists(csv_path):
+                logger.error(f"Dataset file not found: {csv_path}")
+                return json.dumps({
+                    "success": False,
+                    "error": f"Dataset file not found: {csv_filename}"
+                }, indent=2)
 
             # Load the full dataset using Agentics
-            logger.info(f"Loading macro factors dataset from {csv_path}")
+            logger.info(f"Loading {dataset} dataset from {csv_path}")
+            logger.info(f"Date column: {date_column}")
             agentics = AG.from_csv(csv_path)
-            logger.info(f"Loaded {len(agentics.states)} total rows from dataset")
+            logger.info(f"Loaded {len(agentics.states)} total rows from {dataset} dataset")
 
             # Find the indices that correspond to start_date and end_date
             # Agentics creates states where each state has attributes corresponding to CSV columns
             # We need to find which states have Date values in our range
-            logger.info("Searching for date range indices...")
+            logger.info(f"Searching for date range indices using column '{date_column}'...")
             start_index = None
             end_index = None
 
             for i, state in enumerate(agentics.states):
-                state_date = getattr(state, 'Date', None)
+                state_date = getattr(state, date_column, None)
                 if state_date:
                     # Compare dates as strings (they're in YYYY-MM-DD format)
                     if start_index is None and state_date >= start_date:
@@ -159,6 +194,7 @@ class MacroTransductionTool(BaseTool):
 
                 result = {
                     "success": True,
+                    "dataset": dataset,
                     "date_range": {
                         "start": start_date,
                         "end": end_date,
@@ -167,8 +203,6 @@ class MacroTransductionTool(BaseTool):
                         "num_batches": num_batches
                     },
                     "question": question,
-                    "generated_model": pydantic_class.__name__,
-                    "model_code": pydantic_code,
                     "short_answer": final_answer.short_answer,
                     "answer_report": final_answer.answer_report
                 }
@@ -188,7 +222,7 @@ class MacroTransductionTool(BaseTool):
             error_trace = traceback.format_exc()
 
             logger.error("=" * 80)
-            logger.error("EXCEPTION OCCURRED during Macro Transduction Analysis")
+            logger.error("EXCEPTION OCCURRED during Transduction Analysis")
             logger.error(f"Error: {error_msg}")
             logger.error("Traceback:")
             logger.error(error_trace)

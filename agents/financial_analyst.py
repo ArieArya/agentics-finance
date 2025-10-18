@@ -52,7 +52,7 @@ from tools import (
     PriceChartTool,
     PerformanceComparisonChartTool,
     VolatilityChartTool,
-	MacroTransductionTool,
+    UnifiedTransductionTool,
 )
 import os
 from dotenv import load_dotenv
@@ -134,7 +134,7 @@ def create_financial_analyst_agent():
         PerformanceComparisonChartTool(),
         VolatilityChartTool(),
         # Transduction tools
-		MacroTransductionTool(),
+        UnifiedTransductionTool(),
     ]
 
     # Create agent
@@ -211,7 +211,7 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             "   - For DJ30 PRICE CHARTS: Use PriceChartTool (candlestick/OHLC), PerformanceComparisonChartTool, VolatilityChartTool\n"
             "   - For DJ30 PORTFOLIOS: Use VolatilityBasedPortfolioTool, MomentumBasedPortfolioTool, SectorDiversifiedPortfolioTool\n"
             "   - For SPECIFIC DATA VALUES: Use analysis tools or data query tools\n"
-			"   - For MACRO questions where you cannot use other tools: Use MacroTransductionTool\n"
+            "   - For COMPLEX QUESTIONS that standard tools cannot answer: Use UnifiedTransductionTool (specify dataset: macro/market/dj30/firm)\n"
             "   - DO NOT query data before creating visualizations (it creates token overload)\n"
             "4. When working with company fundamentals:\n"
             "   - Compare companies using CompareFundamentalsTool for analysis, CompanyComparisonChartTool for visualization\n"
