@@ -15,7 +15,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from agents import run_analysis
+from agents import run_analysis, get_tool_categories
 from utils import get_data_summary, get_column_descriptions, get_firm_data_summary, get_firm_column_descriptions, get_dj30_data_summary, get_dj30_column_descriptions
 
 # Page configuration
@@ -105,6 +105,10 @@ if "agent_logs" not in st.session_state:
 
 if "show_logs" not in st.session_state:
     st.session_state.show_logs = True
+
+if "enabled_tool_categories" not in st.session_state:
+    # Enable all categories by default
+    st.session_state.enabled_tool_categories = list(get_tool_categories().keys())
 
 
 def clean_old_visualizations():
@@ -1151,7 +1155,7 @@ def render_sector_portfolio(config: dict):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def run_analysis_with_logs(user_input: str, conversation_history: list) -> str:
+def run_analysis_with_logs(user_input: str, conversation_history: list, enabled_tool_categories: list = None) -> str:
     """Run analysis and capture stdout/stderr to display in logs."""
     # Create a StringIO object to capture output
     captured_output = StringIO()
@@ -1163,8 +1167,8 @@ def run_analysis_with_logs(user_input: str, conversation_history: list) -> str:
         sys.stdout = captured_output
         sys.stderr = captured_output
 
-        # Run the analysis
-        response = run_analysis(user_input, conversation_history)
+        # Run the analysis with filtered tools
+        response = run_analysis(user_input, conversation_history, enabled_tool_categories=enabled_tool_categories)
 
         # Restore original stdout/stderr
         sys.stdout = original_stdout
@@ -1274,6 +1278,55 @@ with st.sidebar:
             st.markdown(f"\n*{category}:*")
             for metric in metrics:
                 st.markdown(f"  {metric}")
+
+    st.markdown("---")
+
+    # Tool Category Filter
+    with st.expander("🔧 Tools", expanded=False):
+        st.markdown("**Select which tools to enable:**")
+
+        tool_categories = get_tool_categories()
+
+        # Data Query is always enabled and hidden from options
+        selected_categories = ["Data Query"]
+
+        # Create checkboxes for each category (except Data Query)
+        for category, description in tool_categories.items():
+            # Skip Data Query as it's always enabled
+            if category == "Data Query":
+                continue
+
+            # Check if category is currently enabled
+            is_enabled = category in st.session_state.enabled_tool_categories
+
+            # Create checkbox with description
+            checkbox_value = st.checkbox(
+                f"**{category}**",
+                value=is_enabled,
+                key=f"tool_cat_{category}",
+                help=description
+            )
+
+            # Show description below checkbox
+            if checkbox_value:
+                st.caption(f"✓ {description}")
+                selected_categories.append(category)
+            else:
+                st.caption(f"  {description}")
+
+        st.markdown("---")
+
+        # Update session state if selection changed
+        if set(selected_categories) != set(st.session_state.enabled_tool_categories):
+            st.session_state.enabled_tool_categories = selected_categories
+
+        # Show currently enabled tools count (excluding Data Query from the count display)
+        total_categories = len(tool_categories) - 1  # Exclude Data Query from total
+        enabled_count = len(selected_categories) - 1  # Exclude Data Query from enabled count
+        st.caption(f"📊 **{enabled_count}/{total_categories} optional tool categories enabled**")
+
+        if enabled_count == 0:
+            st.info("ℹ️ Only Data Query tools are enabled. Enable more categories for advanced analysis.")
 
     st.markdown("---")
 
@@ -1419,7 +1472,7 @@ with st.container():
         key="user_input"
     )
 
-    col1, col2 = st.columns([10, 1])
+    col1, col2 = st.columns([8, 1])
     with col2:
         submit_button = st.button("Analyze", type="primary")
 
@@ -1439,7 +1492,11 @@ if submit_button and user_input:
     with st.spinner("Thinking..."):
         try:
             # Run analysis with conversation history for context and capture logs
-            response = run_analysis_with_logs(user_input, st.session_state.messages)
+            response = run_analysis_with_logs(
+                user_input,
+                st.session_state.messages,
+                enabled_tool_categories=st.session_state.enabled_tool_categories
+            )
 
             # Extract visualization IDs from response
             viz_ids = extract_visualization_ids(response)

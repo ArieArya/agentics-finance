@@ -61,9 +61,37 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def create_financial_analyst_agent():
+def get_tool_categories():
+    """
+    Get list of all available tool categories with descriptions.
+
+    Returns:
+        dict: Dictionary mapping category names to descriptions
+    """
+    return {
+        "Data Query": "Query financial data by date range, get indicator statistics",
+        "Basic Analysis": "Volatility, correlation, and extreme value analysis",
+        "Advanced Analysis": "Returns, drawdowns, moving averages, YoY analysis",
+        "News & Events": "Fetch headlines and correlate with market events",
+        "Volatility Explanation": "Comprehensive volatility analysis with context",
+        "Company Fundamentals": "Query and compare company fundamental data",
+        "Portfolio & Strategy": "Generate portfolio recommendations and strategies",
+        "Basic Visualizations": "Time series, heatmaps, distributions",
+        "Advanced Visualizations": "Scatter plots, comparative charts, drawdown plots",
+        "Fundamental Visualizations": "Company comparison charts, valuation plots",
+        "DJ30 Price Analysis": "Analyze DJ30 stock returns, volatility, performance",
+        "DJ30 Portfolios": "Construct volatility/momentum/sector-based portfolios",
+        "DJ30 Visualizations": "Price charts, performance comparisons for DJ30 stocks",
+        "Advanced Transduction": "Deep analysis using AI-powered data reduction",
+    }
+
+
+def create_financial_analyst_agent(enabled_tool_categories=None):
     """
     Create a financial analyst agent with access to data analysis and visualization tools.
+
+    Args:
+        enabled_tool_categories: List of tool category names to enable. If None, all tools are enabled.
 
     Returns:
         Agent: Configured CrewAI agent
@@ -72,70 +100,97 @@ def create_financial_analyst_agent():
     # Initialize LLM
     llm = AG.get_llm_provider()
 
-    # Initialize all tools
-    tools = [
-        # Data query tools
-        AvailableIndicatorsTool(),
-        DateRangeQueryTool(),
-        IndicatorStatsTool(),
-        # Basic analysis tools
-        VolatilityAnalysisTool(),
-        CorrelationAnalysisTool(),
-        FindExtremeValuesTool(),
-        # Advanced analysis tools
-        ReturnsAnalysisTool(),
-        DrawdownAnalysisTool(),
-        MovingAverageTool(),
-        PercentageChangeTool(),
-        YearOverYearTool(),
-        # News and event analysis tools
-        HeadlinesFetcherTool(),
-        VolatilityNewsCorrelationTool(),
-        EventTimelineTool(),
-        # Comprehensive volatility explanation tools
-        ComprehensiveVolatilityExplanationTool(),
-        IdentifyCorrelatedMovementsTool(),
-        # Company fundamental analysis tools
-        CompanyFundamentalsQueryTool(),
-        CompareFundamentalsTool(),
-        ScreenCompaniesTool(),
-        CompanyValuationTool(),
-        FundamentalHistoryTool(),
-        # Portfolio and macro correlation tools
-        PortfolioRecommendationTool(),
-        FundamentalMacroCorrelationTool(),
-        SectorAnalysisTool(),
-        # Basic visualization tools
-        TimeSeriesPlotTool(),
-        CorrelationHeatmapTool(),
-        VolatilityPlotTool(),
-        DistributionPlotTool(),
-        # Advanced visualization tools
-        ScatterPlotTool(),
-        ComparativePerformanceTool(),
-        MovingAveragePlotTool(),
-        DrawdownChartTool(),
-        MultiIndicatorPlotTool(),
-        # Fundamental visualization tools
-        CompanyComparisonChartTool(),
-        FundamentalTimeSeriesPlotTool(),
-        ValuationScatterPlotTool(),
-        # DJ30 price analysis tools
-        DJ30ReturnsAnalysisTool(),
-        DJ30VolatilityAnalysisTool(),
-        PerformanceComparisonTool(),
-        PriceRangeAnalysisTool(),
-        # DJ30 portfolio construction tools
-        VolatilityBasedPortfolioTool(),
-        MomentumBasedPortfolioTool(),
-        SectorDiversifiedPortfolioTool(),
-        # DJ30 visualization tools
-        PriceChartTool(),
-        PerformanceComparisonChartTool(),
-        VolatilityChartTool(),
-        # Transduction tools
-        UnifiedTransductionTool(),
-    ]
+    # Organize tools by category
+    all_tools = {
+        "Data Query": [
+            AvailableIndicatorsTool(),
+            DateRangeQueryTool(),
+            IndicatorStatsTool(),
+        ],
+        "Basic Analysis": [
+            VolatilityAnalysisTool(),
+            CorrelationAnalysisTool(),
+            FindExtremeValuesTool(),
+        ],
+        "Advanced Analysis": [
+            ReturnsAnalysisTool(),
+            DrawdownAnalysisTool(),
+            MovingAverageTool(),
+            PercentageChangeTool(),
+            YearOverYearTool(),
+        ],
+        "News & Events": [
+            HeadlinesFetcherTool(),
+            VolatilityNewsCorrelationTool(),
+            EventTimelineTool(),
+        ],
+        "Volatility Explanation": [
+            ComprehensiveVolatilityExplanationTool(),
+            IdentifyCorrelatedMovementsTool(),
+        ],
+        "Company Fundamentals": [
+            CompanyFundamentalsQueryTool(),
+            CompareFundamentalsTool(),
+            ScreenCompaniesTool(),
+            CompanyValuationTool(),
+            FundamentalHistoryTool(),
+        ],
+        "Portfolio & Strategy": [
+            PortfolioRecommendationTool(),
+            FundamentalMacroCorrelationTool(),
+            SectorAnalysisTool(),
+        ],
+        "Basic Visualizations": [
+            TimeSeriesPlotTool(),
+            CorrelationHeatmapTool(),
+            VolatilityPlotTool(),
+            DistributionPlotTool(),
+        ],
+        "Advanced Visualizations": [
+            ScatterPlotTool(),
+            ComparativePerformanceTool(),
+            MovingAveragePlotTool(),
+            DrawdownChartTool(),
+            MultiIndicatorPlotTool(),
+        ],
+        "Fundamental Visualizations": [
+            CompanyComparisonChartTool(),
+            FundamentalTimeSeriesPlotTool(),
+            ValuationScatterPlotTool(),
+        ],
+        "DJ30 Price Analysis": [
+            DJ30ReturnsAnalysisTool(),
+            DJ30VolatilityAnalysisTool(),
+            PerformanceComparisonTool(),
+            PriceRangeAnalysisTool(),
+        ],
+        "DJ30 Portfolios": [
+            VolatilityBasedPortfolioTool(),
+            MomentumBasedPortfolioTool(),
+            SectorDiversifiedPortfolioTool(),
+        ],
+        "DJ30 Visualizations": [
+            PriceChartTool(),
+            PerformanceComparisonChartTool(),
+            VolatilityChartTool(),
+        ],
+        "Advanced Transduction": [
+            UnifiedTransductionTool(),
+        ],
+    }
+
+    # Filter tools based on enabled categories
+    if enabled_tool_categories is None:
+        # Enable all tools if no filter specified
+        tools = []
+        for category_tools in all_tools.values():
+            tools.extend(category_tools)
+    else:
+        # Enable only selected categories
+        tools = []
+        for category in enabled_tool_categories:
+            if category in all_tools:
+                tools.extend(all_tools[category])
 
     # Create agent
     agent = Agent(
@@ -254,20 +309,21 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
     return task
 
 
-def run_analysis(user_question: str, conversation_history: list = None) -> str:
+def run_analysis(user_question: str, conversation_history: list = None, enabled_tool_categories: list = None) -> str:
     """
     Run a complete analysis for a user question with conversation context.
 
     Args:
         user_question: The user's question
         conversation_history: List of previous messages for context
+        enabled_tool_categories: List of tool category names to enable. If None, all tools are enabled.
 
     Returns:
         str: The agent's analysis and response
     """
     try:
-        # Create agent and task
-        agent = create_financial_analyst_agent()
+        # Create agent and task with filtered tools
+        agent = create_financial_analyst_agent(enabled_tool_categories=enabled_tool_categories)
         task = create_analysis_task(agent, user_question, conversation_history)
 
         # Create crew and run

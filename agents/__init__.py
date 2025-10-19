@@ -3,12 +3,14 @@
 from .financial_analyst import (
     create_financial_analyst_agent,
     create_analysis_task,
-    run_analysis
+    run_analysis,
+    get_tool_categories
 )
 
 __all__ = [
     'create_financial_analyst_agent',
     'create_analysis_task',
-    'run_analysis'
+    'run_analysis',
+    'get_tool_categories'
 ]
 
