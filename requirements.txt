@@ -2,6 +2,7 @@
 crewai>=0.193.0
 crewai-tools>=0.12.0
 python-dotenv>=1.0.0
+google-genai>=1.40.0
 
 # Data processing
 pandas>=2.0.0
@@ -13,8 +14,8 @@ plotly>=5.18.0
 # Streamlit
 streamlit>=1.31.0
 
-# LLM - Gemini support is built into crewai via litellm
-# No additional LLM dependencies needed
+# LLM - Google Gemini support for Agentics library
+# google-genai package required for CrewAI Gemini integration
 
 # Utilities
 pydantic>=2.6.0
