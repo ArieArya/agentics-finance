@@ -46,7 +46,8 @@ class UnifiedTransductionTool(BaseTool):
         "- 'market': Market data & indices (S&P 500, VIX, BTC, Gold, etc.)\n"
         "- 'dj30': DJ30 stock prices (OHLCV data for 30 Dow Jones companies)\n"
         "\n\nInput format: question (str), dataset (str), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)\n"
-        "Note: Limited to 500 rows per analysis."
+        "Note: For large date ranges (>100 rows), the tool automatically applies uniform temporal sampling "
+        "to analyze ~100 representative data points while preserving time-series patterns."
     )
     args_schema: Type[BaseModel] = TransductionInput
 
@@ -119,21 +120,31 @@ class UnifiedTransductionTool(BaseTool):
             num_rows = end_index - start_index
             print(f"📊 Found date range: rows {start_index} to {end_index} ({num_rows:,} total rows)")
 
-            # Check if number of rows exceeds the limit
-            MAX_ROWS_LIMIT = 500
-            if num_rows > MAX_ROWS_LIMIT:
-                print(f"⚠️  WARNING: Selected number of rows ({num_rows:,}) exceeds limit of {MAX_ROWS_LIMIT:,}")
-                return json.dumps({
-                    "success": False,
-                    "error": f"Selected number of rows ({num_rows}) exceeds the limit for transduction ({MAX_ROWS_LIMIT} rows). Please select a smaller date range.",
-                    "rows_requested": num_rows,
-                    "max_allowed": MAX_ROWS_LIMIT,
-                    "suggestion": f"Try reducing the date range to analyze approximately {MAX_ROWS_LIMIT} days or less."
-                }, indent=2)
+            # Filter the dataset to the date range first
+            print(f"\n🔽 Filtering dataset to date range...")
+            filtered_agentics = agentics.filter_states(start=start_index, end=end_index)
+            print(f"✅ Filtered dataset contains {len(filtered_agentics.states):,} states")
+
+            # Apply uniform sampling if we have too many rows
+            TARGET_SAMPLE_SIZE = 100
+            actual_rows = len(filtered_agentics.states)
+            
+            if actual_rows > TARGET_SAMPLE_SIZE:
+                print(f"\n🎲 Dataset exceeds {TARGET_SAMPLE_SIZE} rows. Applying uniform sampling...")
+                print(f"   Original rows: {actual_rows:,}")
+                sampling_interval = actual_rows / TARGET_SAMPLE_SIZE
+                print(f"   Sampling interval: ~1 row every {sampling_interval:.1f} rows")
+                
+                filtered_agentics = filtered_agentics.get_uniform_sample(TARGET_SAMPLE_SIZE)
+                sampled_rows = len(filtered_agentics.states)
+                print(f"✅ Sampled down to {sampled_rows:,} rows (uniform temporal distribution)")
+            else:
+                sampled_rows = actual_rows
+                print(f"✅ No sampling needed ({actual_rows} rows <= {TARGET_SAMPLE_SIZE})")
 
             # Calculate batch size: aim for ~10 batches
-            batch_size = max(2, num_rows // 10)  # At least 2 rows per batch
-            num_batches = (num_rows + batch_size - 1) // batch_size  # Ceiling division
+            batch_size = max(2, sampled_rows // 10)  # At least 2 rows per batch
+            num_batches = (sampled_rows + batch_size - 1) // batch_size  # Ceiling division
             print(f"📦 Batch configuration: {num_batches} batches of ~{batch_size} rows each")
 
             # Generate intermediate answer type based on the question
@@ -156,12 +167,7 @@ class UnifiedTransductionTool(BaseTool):
             if hasattr(pydantic_class, 'model_fields'):
                 print(f"📋 Model fields: {list(pydantic_class.model_fields.keys())}")
 
-            # Filter the dataset to the date range
-            print(f"\n🔽 Filtering dataset to date range...")
-            filtered_agentics = agentics.filter_states(start=start_index, end=end_index)
-            print(f"✅ Filtered dataset contains {len(filtered_agentics.states):,} states")
-
-            # Perform reduction on the filtered dataset
+            # Perform reduction on the filtered (and possibly sampled) dataset
             print(f"\n⚡ Starting batch reduction with {num_batches} batches...")
             reduced = asyncio.run(
                 AG(
@@ -197,7 +203,10 @@ class UnifiedTransductionTool(BaseTool):
                     "date_range": {
                         "start": start_date,
                         "end": end_date,
-                        "rows_analyzed": num_rows,
+                        "total_rows_in_range": num_rows,
+                        "rows_analyzed": sampled_rows,
+                        "sampling_applied": sampled_rows < num_rows,
+                        "sampling_ratio": f"1:{int(num_rows/sampled_rows)}" if sampled_rows < num_rows else "1:1",
                         "batch_size": batch_size,
                         "num_batches": num_batches
                     },
