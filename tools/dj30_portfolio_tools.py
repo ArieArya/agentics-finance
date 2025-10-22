@@ -72,7 +72,7 @@ class VolatilityBasedPortfolioTool(BaseTool):
 
             # Get sector info
             sector = ticker_df['sector'].iloc[-1] if 'sector' in ticker_df.columns else "Unknown"
-            
+
             # Get dividend yield if available
             dividend_yield = ticker_df['dividendYield'].iloc[-1] if 'dividendYield' in ticker_df.columns and pd.notna(ticker_df['dividendYield'].iloc[-1]) else 0.0
 
@@ -91,7 +91,7 @@ class VolatilityBasedPortfolioTool(BaseTool):
         # Select positions based on portfolio type
         long_positions = []
         short_positions = []
-        
+
         if portfolio_type == "long_low_vol":
             # Long the LEAST volatile stocks (defensive portfolio)
             long_positions = sorted_by_vol[-num_positions:]
@@ -110,7 +110,7 @@ class VolatilityBasedPortfolioTool(BaseTool):
             short_positions.reverse()
         else:
             return json.dumps({"error": f"Invalid portfolio_type: {portfolio_type}. Must be one of: long_low_vol, long_high_vol, short_only, long_short"})
-        
+
         if not long_positions and not short_positions:
             return json.dumps({"error": "No positions generated. Check your parameters."})
 
@@ -140,10 +140,10 @@ class VolatilityBasedPortfolioTool(BaseTool):
             "short_only": "High-Volatility Short Portfolio",
             "long_short": "Volatility-Based Long/Short Portfolio (Arbitrage)"
         }
-        
+
         summary = f"\n=== {portfolio_names.get(portfolio_type, 'VOLATILITY-BASED PORTFOLIO')} ===\n"
         summary += f"Period: {start_date} to {end_date}\n\n"
-        
+
         if long_positions:
             if portfolio_type == "long_low_vol":
                 summary += "LONG POSITIONS (Low Volatility - Defensive):\n"
@@ -151,7 +151,7 @@ class VolatilityBasedPortfolioTool(BaseTool):
                 summary += "LONG POSITIONS (High Volatility - Aggressive):\n"
             else:
                 summary += "LONG POSITIONS (High Volatility):\n"
-                
+
             for pos in long_positions:
                 summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
                 summary += f"      Price: ${pos['current_price']:.2f} | Volatility: {pos['volatility']:.2f}% | Return: {pos['annualized_return']:+.2f}%"
@@ -222,22 +222,27 @@ class MomentumBasedPortfolioInput(BaseModel):
     """Input for Momentum-Based Portfolio Tool."""
     start_date: str = Field(..., description="Start date for calculating momentum (YYYY-MM-DD)")
     end_date: str = Field(..., description="End date for calculating momentum (YYYY-MM-DD)")
-    num_long: int = Field(default=5, description="Number of stocks to long (high momentum)")
-    num_short: int = Field(default=5, description="Number of stocks to short (low momentum)")
+    portfolio_type: str = Field(
+        default="long_only",
+        description="Type of portfolio: 'long_only' (long winners), 'short_only' (short losers), 'long_short' (arbitrage strategy)"
+    )
+    num_positions: int = Field(default=5, description="Number of positions in the portfolio")
     lookback_days: int = Field(default=252, description="Number of days to look back for momentum calculation")
 
 
 class MomentumBasedPortfolioTool(BaseTool):
     name: str = "Create Momentum-Based Portfolio"
     description: str = (
-        "Constructs a long/short portfolio based on price momentum. "
-        "Goes long the best performing stocks and short the worst performing stocks. "
+        "Constructs portfolios based on price momentum. Supports multiple strategies: "
+        "'long_only' for long positions in high-momentum stocks (trend-following), "
+        "'short_only' for short positions in low-momentum stocks, "
+        "'long_short' for momentum arbitrage (long winners, short losers). "
         "Calculates cumulative returns over a specified period. "
-        "Use this for trend-following or momentum strategies."
+        "Use 'long_only' when asked about strongest momentum or best performers."
     )
     args_schema: type[BaseModel] = MomentumBasedPortfolioInput
 
-    def _run(self, start_date: str, end_date: str, num_long: int = 5, num_short: int = 5, lookback_days: int = 252) -> str:
+    def _run(self, start_date: str, end_date: str, portfolio_type: str = "long_only", num_positions: int = 5, lookback_days: int = 252) -> str:
         # Get all DJ30 tickers
         all_tickers = get_available_tickers()
 
@@ -278,47 +283,76 @@ class MomentumBasedPortfolioTool(BaseTool):
                 "sector": sector
             })
 
-        if len(momentum_data) < (num_long + num_short):
-            return json.dumps({"error": f"Insufficient data. Only {len(momentum_data)} stocks available."})
-
         # Sort by momentum
         sorted_by_momentum = sorted(momentum_data, key=lambda x: x['momentum'], reverse=True)
 
-        # Select long (high momentum) and short (low momentum) positions
-        long_positions = sorted_by_momentum[:num_long]
-        short_positions = sorted_by_momentum[-num_short:]
+        # Select positions based on portfolio type
+        long_positions = []
+        short_positions = []
+        
+        if portfolio_type == "long_only":
+            # Long only the highest momentum stocks
+            long_positions = sorted_by_momentum[:num_positions]
+        elif portfolio_type == "short_only":
+            # Short only the lowest momentum stocks
+            short_positions = sorted_by_momentum[-num_positions:]
+            short_positions.reverse()  # Show worst first
+        elif portfolio_type == "long_short":
+            # Traditional arbitrage: long winners, short losers
+            num_each = num_positions
+            long_positions = sorted_by_momentum[:num_each]
+            short_positions = sorted_by_momentum[-num_each:]
+            short_positions.reverse()
+        else:
+            return json.dumps({"error": f"Invalid portfolio_type: {portfolio_type}. Must be one of: long_only, short_only, long_short"})
+        
+        if not long_positions and not short_positions:
+            return json.dumps({"error": "No positions generated. Check your parameters."})
 
         # Add rationale
         for i, pos in enumerate(long_positions, 1):
             pos['rank'] = i
-            pos['rationale'] = f"Strong momentum of {pos['momentum']:.2f}% suggests continued upward trend. Volatility: {pos['volatility']:.2f}%."
+            pos['rationale'] = f"Strong momentum of {pos['momentum']:+.2f}% suggests continued upward trend. Volatility: {pos['volatility']:.2f}%."
 
         for i, pos in enumerate(short_positions, 1):
             pos['rank'] = i
-            pos['rationale'] = f"Weak momentum of {pos['momentum']:.2f}% suggests continued downward trend. Volatility: {pos['volatility']:.2f}%."
+            pos['rationale'] = f"Weak momentum of {pos['momentum']:+.2f}% suggests continued downward pressure. Volatility: {pos['volatility']:.2f}%."
 
         # Calculate portfolio statistics
-        avg_momentum_long = np.mean([p['momentum'] for p in long_positions])
-        avg_momentum_short = np.mean([p['momentum'] for p in short_positions])
+        avg_momentum_long = np.mean([p['momentum'] for p in long_positions]) if long_positions else 0
+        avg_momentum_short = np.mean([p['momentum'] for p in short_positions]) if short_positions else 0
 
-        # Create summary
-        summary = f"\n=== MOMENTUM-BASED PORTFOLIO (Period: {start_date} to {end_date}) ===\n\n"
-        summary += "LONG POSITIONS (High Momentum):\n"
-        for pos in long_positions:
-            summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
-            summary += f"      Price: ${pos['current_price']:.2f} | Momentum: {pos['momentum']:.2f}% | Volatility: {pos['volatility']:.2f}%\n"
-            summary += f"      {pos['rationale']}\n\n"
+        # Create summary based on portfolio type
+        portfolio_names = {
+            "long_only": "Momentum Long Portfolio (Winners)",
+            "short_only": "Momentum Short Portfolio (Losers)",
+            "long_short": "Momentum-Based Long/Short Portfolio (Arbitrage)"
+        }
+        
+        summary = f"\n=== {portfolio_names.get(portfolio_type, 'MOMENTUM-BASED PORTFOLIO')} ===\n"
+        summary += f"Period: {start_date} to {end_date}\n\n"
+        
+        if long_positions:
+            summary += "LONG POSITIONS (High Momentum):\n"
+            for pos in long_positions:
+                summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
+                summary += f"      Price: ${pos['current_price']:.2f} | Momentum: {pos['momentum']:+.2f}% | Volatility: {pos['volatility']:.2f}%\n"
+                summary += f"      {pos['rationale']}\n\n"
 
-        summary += "\nSHORT POSITIONS (Low Momentum):\n"
-        for pos in short_positions:
-            summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
-            summary += f"      Price: ${pos['current_price']:.2f} | Momentum: {pos['momentum']:.2f}% | Volatility: {pos['volatility']:.2f}%\n"
-            summary += f"      {pos['rationale']}\n\n"
+        if short_positions:
+            summary += "\nSHORT POSITIONS (Low Momentum):\n"
+            for pos in short_positions:
+                summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
+                summary += f"      Price: ${pos['current_price']:.2f} | Momentum: {pos['momentum']:+.2f}% | Volatility: {pos['volatility']:.2f}%\n"
+                summary += f"      {pos['rationale']}\n\n"
 
         summary += f"\nPORTFOLIO STATISTICS:\n"
-        summary += f"  Average Momentum (Long): {avg_momentum_long:.2f}%\n"
-        summary += f"  Average Momentum (Short): {avg_momentum_short:.2f}%\n"
-        summary += f"  Momentum Spread: {avg_momentum_long - avg_momentum_short:.2f}%\n"
+        if long_positions:
+            summary += f"  Average Momentum (Long): {avg_momentum_long:+.2f}%\n"
+        if short_positions:
+            summary += f"  Average Momentum (Short): {avg_momentum_short:+.2f}%\n"
+        if long_positions and short_positions:
+            summary += f"  Momentum Spread: {avg_momentum_long - avg_momentum_short:.2f}%\n"
 
         # Create visualization
         viz_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "visualizations")
@@ -328,7 +362,8 @@ class MomentumBasedPortfolioTool(BaseTool):
         viz_config = {
             "type": "momentum_portfolio",
             "id": viz_id,
-            "title": f"Momentum-Based Long/Short Portfolio ({start_date} to {end_date})",
+            "title": f"{portfolio_names.get(portfolio_type, 'Momentum Portfolio')} ({start_date} to {end_date})",
+            "portfolio_type": portfolio_type,
             "long_positions": long_positions,
             "short_positions": short_positions
         }
@@ -339,17 +374,23 @@ class MomentumBasedPortfolioTool(BaseTool):
 
         summary += f"\nA portfolio visualization has been created (Visualization ID: {viz_id}).\n"
 
+        # Build statistics dict
+        statistics = {}
+        if long_positions:
+            statistics["avg_momentum_long"] = float(avg_momentum_long)
+        if short_positions:
+            statistics["avg_momentum_short"] = float(avg_momentum_short)
+        if long_positions and short_positions:
+            statistics["momentum_spread"] = float(avg_momentum_long - avg_momentum_short)
+
         result = {
             "success": True,
             "strategy": "momentum-based",
+            "portfolio_type": portfolio_type,
             "period": {"start": start_date, "end": end_date},
             "long_positions": long_positions,
             "short_positions": short_positions,
-            "statistics": {
-                "avg_momentum_long": float(avg_momentum_long),
-                "avg_momentum_short": float(avg_momentum_short),
-                "momentum_spread": float(avg_momentum_long - avg_momentum_short)
-            },
+            "statistics": statistics,
             "summary": summary,
             "visualization_id": viz_id
         }
