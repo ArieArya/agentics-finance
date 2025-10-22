@@ -1104,18 +1104,18 @@ def render_momentum_portfolio(config: dict):
     long_positions = config.get("long_positions", [])
     short_positions = config.get("short_positions", [])
     portfolio_type = config.get("portfolio_type", "long_short")
-    
+
     # Render title
     st.markdown(f"### {config.get('title', 'Momentum-Based Portfolio')}")
-    
+
     # Determine layout based on what positions exist
     has_long = len(long_positions) > 0
     has_short = len(short_positions) > 0
-    
+
     if has_long and has_short:
         # Two columns for long/short
         col1, col2 = st.columns(2)
-        
+
         with col1:
             st.markdown("**🟢 Long Positions (High Momentum)**")
             for i, p in enumerate(long_positions):
@@ -1125,7 +1125,7 @@ def render_momentum_portfolio(config: dict):
                     <small>Momentum: {p.get('momentum', 0):+.2f}% | Vol: {p.get('volatility', 0):.2f}%</small>
                 </div>
                 """, unsafe_allow_html=True)
-        
+
         with col2:
             st.markdown("**🔴 Short Positions (Low Momentum)**")
             for i, p in enumerate(short_positions):
@@ -1135,12 +1135,12 @@ def render_momentum_portfolio(config: dict):
                     <small>Momentum: {p.get('momentum', 0):+.2f}% | Vol: {p.get('volatility', 0):.2f}%</small>
                 </div>
                 """, unsafe_allow_html=True)
-    
+
     elif has_long:
         # Only long positions - single column
         st.markdown("**🟢 Long Positions**")
         st.caption("High Momentum - Trend Following Strategy")
-        
+
         for i, p in enumerate(long_positions):
             st.markdown(f"""
             <div style="padding: 10px; margin: 6px 0; border-left: 4px solid #4CAF50; background-color: var(--secondary-background-color);">
@@ -1149,12 +1149,12 @@ def render_momentum_portfolio(config: dict):
                 <small style="color: var(--text-color); opacity: 0.8;">{p.get('rationale', '')}</small>
             </div>
             """, unsafe_allow_html=True)
-    
+
     elif has_short:
         # Only short positions - single column
         st.markdown("**🔴 Short Positions**")
         st.caption("Low Momentum - Contrarian Strategy")
-        
+
         for i, p in enumerate(short_positions):
             st.markdown(f"""
             <div style="padding: 10px; margin: 6px 0; border-left: 4px solid #F44336; background-color: var(--secondary-background-color);">
@@ -1366,16 +1366,10 @@ with st.sidebar:
         st.markdown("**Select which tools to enable:**")
 
         tool_categories = get_tool_categories()
-
-        # Data Query is always enabled and hidden from options
-        selected_categories = ["Data Query"]
+        selected_categories = []
 
         # Create checkboxes for each category (except Data Query)
         for category, description in tool_categories.items():
-            # Skip Data Query as it's always enabled
-            if category == "Data Query":
-                continue
-
             # Check if category is currently enabled
             is_enabled = category in st.session_state.enabled_tool_categories
 
@@ -1400,13 +1394,11 @@ with st.sidebar:
         if set(selected_categories) != set(st.session_state.enabled_tool_categories):
             st.session_state.enabled_tool_categories = selected_categories
 
-        # Show currently enabled tools count (excluding Data Query from the count display)
-        total_categories = len(tool_categories) - 1  # Exclude Data Query from total
-        enabled_count = len(selected_categories) - 1  # Exclude Data Query from enabled count
+        # Show currently enabled tools count
+        total_categories = len(tool_categories)
+        enabled_count = len(selected_categories)
         st.caption(f"📊 **{enabled_count}/{total_categories} optional tool categories enabled**")
 
-        if enabled_count == 0:
-            st.info("ℹ️ Only Data Query tools are enabled. Enable more categories for advanced analysis.")
 
     st.markdown("---")
 

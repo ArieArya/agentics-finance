@@ -289,7 +289,7 @@ class MomentumBasedPortfolioTool(BaseTool):
         # Select positions based on portfolio type
         long_positions = []
         short_positions = []
-        
+
         if portfolio_type == "long_only":
             # Long only the highest momentum stocks
             long_positions = sorted_by_momentum[:num_positions]
@@ -305,7 +305,7 @@ class MomentumBasedPortfolioTool(BaseTool):
             short_positions.reverse()
         else:
             return json.dumps({"error": f"Invalid portfolio_type: {portfolio_type}. Must be one of: long_only, short_only, long_short"})
-        
+
         if not long_positions and not short_positions:
             return json.dumps({"error": "No positions generated. Check your parameters."})
 
@@ -328,10 +328,10 @@ class MomentumBasedPortfolioTool(BaseTool):
             "short_only": "Momentum Short Portfolio (Losers)",
             "long_short": "Momentum-Based Long/Short Portfolio (Arbitrage)"
         }
-        
+
         summary = f"\n=== {portfolio_names.get(portfolio_type, 'MOMENTUM-BASED PORTFOLIO')} ===\n"
         summary += f"Period: {start_date} to {end_date}\n\n"
-        
+
         if long_positions:
             summary += "LONG POSITIONS (High Momentum):\n"
             for pos in long_positions:

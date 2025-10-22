@@ -230,81 +230,71 @@ def create_financial_analyst_agent(enabled_tool_categories=None):
 def generate_tool_instructions(enabled_tool_categories: list = None) -> str:
     """
     Generate dynamic tool instructions based on enabled tool categories.
-    
+
     Args:
         enabled_tool_categories: List of enabled tool category names
-        
+
     Returns:
         str: Formatted tool instructions
     """
     if not enabled_tool_categories:
         # If no categories specified, return general instructions
         return (
-            "   - For MARKET/MACRO VISUALIZATIONS: Use market visualization tools DIRECTLY (they load data themselves)\n"
-            "   - For COMPANY COMPARISONS: Use CompanyComparisonChartTool for side-by-side fundamental metrics\n"
-            "   - For PORTFOLIO RECOMMENDATIONS (fundamentals-based): Use PortfolioRecommendationTool\n"
-            "   - For COMPANY ANALYSIS: Use CompanyFundamentalsQueryTool, CompanyValuationTool, FundamentalHistoryTool\n"
-            "   - For SCREENING: Use ScreenCompaniesTool to filter companies by criteria\n"
-            "   - For DJ30 PRICE ANALYSIS: Use DJ30ReturnsAnalysisTool, DJ30VolatilityAnalysisTool, PriceRangeAnalysisTool\n"
-            "   - For DJ30 PRICE CHARTS: Use PriceChartTool (candlestick/OHLC), PerformanceComparisonChartTool, VolatilityChartTool\n"
-            "   - For DJ30 PORTFOLIOS: Use VolatilityBasedPortfolioTool, MomentumBasedPortfolioTool, SectorDiversifiedPortfolioTool\n"
-            "   - For SPECIFIC DATA VALUES: Use analysis tools or data query tools\n"
-            "   - For COMPLEX QUESTIONS that standard tools cannot answer: Use UnifiedTransductionTool (specify dataset: macro/market/dj30/firm)\n"
-            "   - DO NOT query data before creating visualizations (it creates token overload)\n"
+            "Answer the user's queries based on your own knowledge. Do so succinctly and briefly (max 1 paragraph, important!).\n"
         )
-    
+
     instructions = []
-    
+
     # Category-specific instructions
     if "Data Query" in enabled_tool_categories:
         instructions.append("   - For SPECIFIC DATA VALUES: Use DateRangeQueryTool, IndicatorStatsTool, AvailableIndicatorsTool")
-    
+
     if "Basic Analysis" in enabled_tool_categories:
         instructions.append("   - For VOLATILITY & CORRELATION: Use VolatilityAnalysisTool, CorrelationAnalysisTool, FindExtremeValuesTool")
-    
+
     if "Advanced Analysis" in enabled_tool_categories:
         instructions.append("   - For RETURNS & PERFORMANCE: Use ReturnsAnalysisTool, DrawdownAnalysisTool, MovingAverageTool, PercentageChangeTool, YearOverYearTool")
-    
+
     if "News & Events" in enabled_tool_categories:
         instructions.append("   - For NEWS CORRELATION: Use HeadlinesFetcherTool, VolatilityNewsCorrelationTool, EventTimelineTool")
-    
+
     if "Volatility Explanation" in enabled_tool_categories:
         instructions.append("   - For COMPREHENSIVE VOLATILITY: Use ComprehensiveVolatilityExplanationTool, IdentifyCorrelatedMovementsTool")
-    
+
     if "Company Fundamentals" in enabled_tool_categories:
         instructions.append("   - For COMPANY ANALYSIS: Use CompanyFundamentalsQueryTool, CompareFundamentalsTool, ScreenCompaniesTool, CompanyValuationTool, FundamentalHistoryTool")
         instructions.append("   - For COMPANY COMPARISONS: Use CompareFundamentalsTool for analysis, CompanyComparisonChartTool for visualization")
-    
+
     if "Portfolio & Strategy" in enabled_tool_categories:
         instructions.append("   - For PORTFOLIO RECOMMENDATIONS (fundamentals-based): Use PortfolioRecommendationTool")
         instructions.append("   - For MACRO CORRELATIONS: Use FundamentalMacroCorrelationTool, SectorAnalysisTool")
-    
+
     if "Basic Visualizations" in enabled_tool_categories:
         instructions.append("   - For BASIC CHARTS: Use TimeSeriesPlotTool, CorrelationHeatmapTool, VolatilityPlotTool, DistributionPlotTool")
-    
+
     if "Advanced Visualizations" in enabled_tool_categories:
         instructions.append("   - For ADVANCED CHARTS: Use ScatterPlotTool, ComparativePerformanceTool, MovingAveragePlotTool, DrawdownChartTool, MultiIndicatorPlotTool")
-    
+
     if "Fundamental Visualizations" in enabled_tool_categories:
         instructions.append("   - For FUNDAMENTAL CHARTS: Use CompanyComparisonChartTool, FundamentalTimeSeriesPlotTool, ValuationScatterPlotTool")
-    
+
     if "DJ30 Price Analysis" in enabled_tool_categories:
         instructions.append("   - For DJ30 PRICE ANALYSIS: Use DJ30ReturnsAnalysisTool, DJ30VolatilityAnalysisTool, PerformanceComparisonTool, PriceRangeAnalysisTool")
-    
+
     if "DJ30 Portfolios" in enabled_tool_categories:
         instructions.append("   - For DJ30 PORTFOLIOS: Use VolatilityBasedPortfolioTool, MomentumBasedPortfolioTool, SectorDiversifiedPortfolioTool")
         instructions.append("   - IMPORTANT: DJ30 portfolio tools automatically create visualizations and return Visualization IDs")
         instructions.append("   - Always include the Visualization ID in your response when one is generated")
-    
+
     if "DJ30 Visualizations" in enabled_tool_categories:
         instructions.append("   - For DJ30 PRICE CHARTS: Use PriceChartTool (candlestick/OHLC), PerformanceComparisonChartTool, VolatilityChartTool")
-    
+
     if "Advanced Transduction" in enabled_tool_categories:
         instructions.append("   - For COMPLEX QUESTIONS that standard tools cannot answer: Use UnifiedTransductionTool (specify dataset: macro/market/dj30/firm)")
-    
+
     # Add general guidance
     instructions.append("   - DO NOT query data before creating visualizations (it creates token overload)")
-    
+
     return "\n".join(instructions) + "\n"
 
 

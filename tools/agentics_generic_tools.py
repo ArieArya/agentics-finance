@@ -15,11 +15,13 @@ from datetime import datetime
 
 class TransductionAnswer(BaseModel):
     short_answer: str | None = None
-    answer_report: str | None = Field(
+    detailed_answer: str | None = Field(
         None,
-        description="""
-A detailed Markdown Document reporting evidence for the above answer
-""",
+        description="A detailed Markdown Document reporting evidence for the above answer and a more detailed explanation"
+    )
+    explanation: str | None = Field(
+        None,
+        description="A detailed explanation of the answer"
     )
 
 
@@ -128,13 +130,13 @@ class UnifiedTransductionTool(BaseTool):
             # Apply uniform sampling if we have too many rows
             TARGET_SAMPLE_SIZE = 100
             actual_rows = len(filtered_agentics.states)
-            
+
             if actual_rows > TARGET_SAMPLE_SIZE:
                 print(f"\n🎲 Dataset exceeds {TARGET_SAMPLE_SIZE} rows. Applying uniform sampling...")
                 print(f"   Original rows: {actual_rows:,}")
                 sampling_interval = actual_rows / TARGET_SAMPLE_SIZE
                 print(f"   Sampling interval: ~1 row every {sampling_interval:.1f} rows")
-                
+
                 filtered_agentics = filtered_agentics.get_uniform_sample(TARGET_SAMPLE_SIZE)
                 sampled_rows = len(filtered_agentics.states)
                 print(f"✅ Sampled down to {sampled_rows:,} rows (uniform temporal distribution)")
@@ -180,6 +182,9 @@ class UnifiedTransductionTool(BaseTool):
             print(f"✅ Batch reduction complete. Generated {len(reduced.states):,} intermediate results")
             reduced = reduced.add_attribute("question", default_value=question)
 
+            print(f"\n 🔽 INTERMEDIATE RESULTS:")
+            reduced.pretty_print()
+
             # Generate final answer
             print(f"\n📝 Generating final comprehensive answer...")
             answer = asyncio.run(
@@ -212,7 +217,8 @@ class UnifiedTransductionTool(BaseTool):
                     },
                     "question": question,
                     "short_answer": final_answer.short_answer,
-                    "answer_report": final_answer.answer_report
+                    "detailed_answer": final_answer.detailed_answer,
+                    "explanation": final_answer.explanation
                 }
 
                 print(f"✅ Returning result with {len(result)} fields\n")

@@ -185,36 +185,36 @@ class AG(BaseModel, Generic[T]):
     def get_uniform_sample(self, target_count: int) -> AG:
         """
         Returns an AG with uniformly sampled states to reach approximately target_count.
-        
+
         This method samples states at regular intervals to preserve temporal distribution,
         which is important for time-series data. If the current number of states is already
         less than or equal to target_count, returns all states unchanged.
-        
+
         Args:
             target_count: The desired number of states in the output
-            
+
         Returns:
             AG: A new AG object with uniformly sampled states
-            
+
         Example:
             >>> ag = AG.from_csv("data.csv")  # 1000 states
             >>> sampled = ag.get_uniform_sample(100)  # Returns ~100 evenly spaced states
         """
         if target_count <= 0:
             raise ValueError("target_count must be positive")
-        
+
         total_states = len(self.states)
-        
+
         # If we already have fewer states than target, return all
         if total_states <= target_count:
             return self.clone()
-        
+
         # Calculate sampling interval
         interval = total_states / target_count
-        
+
         # Sample at regular intervals
         sampled_indices = [int(i * interval) for i in range(target_count)]
-        
+
         output = self.clone()
         output.states = [self.states[i] for i in sampled_indices]
         return output
@@ -243,10 +243,10 @@ class AG(BaseModel, Generic[T]):
             generated_atype_ag = await (
                 AG(
                     atype=GeneratedAtype,
-                    instructions="""Generate python code for the input nl type specs. 
-                Make all fields Optional. Use only primitive types for the fields, avoiding nested. 
+                    instructions="""Generate python code for the input nl type specs.
+                Make all fields Optional. Use only primitive types for the fields, avoiding nested.
                 Provide descriptions for the class and all its fields, using Field(None,description= "...")
-                If the input nl type spec is a question, generate a pydantic type that can be used to 
+                If the input nl type spec is a question, generate a pydantic type that can be used to
                 represent the answer to that question.
                 """,
                 )
@@ -700,6 +700,7 @@ class AG(BaseModel, Generic[T]):
                 chunks = chunk_list(other, chunk_size=self.areduce_batch_size)
             else:
                 chunks = chunk_list(other.states, chunk_size=self.areduce_batch_size)
+
             if len(chunks) == 1:
                 self.transduction_type = "amap"
                 self = await (self << str(chunks[0]))
