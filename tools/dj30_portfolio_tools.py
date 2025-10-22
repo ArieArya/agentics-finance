@@ -19,22 +19,27 @@ class VolatilityBasedPortfolioInput(BaseModel):
     """Input for Volatility-Based Portfolio Tool."""
     start_date: str = Field(..., description="Start date for calculating volatility (YYYY-MM-DD)")
     end_date: str = Field(..., description="End date for calculating volatility (YYYY-MM-DD)")
-    num_long: int = Field(default=5, description="Number of stocks to long (high volatility)")
-    num_short: int = Field(default=5, description="Number of stocks to short (low volatility)")
+    portfolio_type: str = Field(
+        default="long_short",
+        description="Type of portfolio: 'long_low_vol' (long stable stocks), 'long_high_vol' (long volatile stocks), 'long_short' (arbitrage strategy), 'short_only' (short high volatility)"
+    )
+    num_positions: int = Field(default=5, description="Number of positions in the portfolio")
     lookback_days: int = Field(default=252, description="Number of days to look back for volatility calculation")
 
 
 class VolatilityBasedPortfolioTool(BaseTool):
     name: str = "Create Volatility-Based Portfolio"
     description: str = (
-        "Constructs a long/short portfolio based on stock volatility. "
-        "Goes long the most volatile stocks and short the least volatile stocks. "
-        "Calculates historical volatility over a specified period. "
-        "Use this for volatility arbitrage or risk-based strategies."
+        "Constructs portfolios based on stock volatility. Supports multiple strategies: "
+        "'long_low_vol' for defensive portfolios (long stable, low-volatility stocks), "
+        "'long_high_vol' for aggressive portfolios (long volatile stocks with growth potential), "
+        "'long_short' for volatility arbitrage (long high-vol, short low-vol), "
+        "'short_only' to short high-volatility stocks. "
+        "Calculates historical volatility over a specified period."
     )
     args_schema: type[BaseModel] = VolatilityBasedPortfolioInput
 
-    def _run(self, start_date: str, end_date: str, num_long: int = 5, num_short: int = 5, lookback_days: int = 252) -> str:
+    def _run(self, start_date: str, end_date: str, portfolio_type: str = "long_short", num_positions: int = 5, lookback_days: int = 252) -> str:
         # Get all DJ30 tickers
         all_tickers = get_available_tickers()
 
@@ -67,56 +72,107 @@ class VolatilityBasedPortfolioTool(BaseTool):
 
             # Get sector info
             sector = ticker_df['sector'].iloc[-1] if 'sector' in ticker_df.columns else "Unknown"
+            
+            # Get dividend yield if available
+            dividend_yield = ticker_df['dividendYield'].iloc[-1] if 'dividendYield' in ticker_df.columns and pd.notna(ticker_df['dividendYield'].iloc[-1]) else 0.0
 
             volatility_data.append({
                 "ticker": ticker,
                 "volatility": float(volatility * 100),  # %
                 "annualized_return": float(mean_return * 100),  # %
                 "current_price": float(current_price),
-                "sector": sector
+                "sector": sector,
+                "dividend_yield": float(dividend_yield)
             })
-
-        if len(volatility_data) < (num_long + num_short):
-            return json.dumps({"error": f"Insufficient data. Only {len(volatility_data)} stocks available."})
 
         # Sort by volatility
         sorted_by_vol = sorted(volatility_data, key=lambda x: x['volatility'], reverse=True)
 
-        # Select long (high volatility) and short (low volatility) positions
-        long_positions = sorted_by_vol[:num_long]
-        short_positions = sorted_by_vol[-num_short:]
+        # Select positions based on portfolio type
+        long_positions = []
+        short_positions = []
+        
+        if portfolio_type == "long_low_vol":
+            # Long the LEAST volatile stocks (defensive portfolio)
+            long_positions = sorted_by_vol[-num_positions:]
+            long_positions.reverse()  # Show lowest vol first
+        elif portfolio_type == "long_high_vol":
+            # Long the MOST volatile stocks (aggressive portfolio)
+            long_positions = sorted_by_vol[:num_positions]
+        elif portfolio_type == "short_only":
+            # Short the MOST volatile stocks
+            short_positions = sorted_by_vol[:num_positions]
+        elif portfolio_type == "long_short":
+            # Traditional arbitrage: long high vol, short low vol
+            num_each = num_positions
+            long_positions = sorted_by_vol[:num_each]
+            short_positions = sorted_by_vol[-num_each:]
+            short_positions.reverse()
+        else:
+            return json.dumps({"error": f"Invalid portfolio_type: {portfolio_type}. Must be one of: long_low_vol, long_high_vol, short_only, long_short"})
+        
+        if not long_positions and not short_positions:
+            return json.dumps({"error": "No positions generated. Check your parameters."})
 
-        # Add rationale
+        # Add rationale based on portfolio type
         for i, pos in enumerate(long_positions, 1):
             pos['rank'] = i
-            pos['rationale'] = f"High volatility of {pos['volatility']:.2f}% indicates potential for large price movements. Annual return: {pos['annualized_return']:.2f}%."
+            if portfolio_type == "long_low_vol":
+                pos['rationale'] = f"Low volatility of {pos['volatility']:.2f}% indicates price stability and defensive characteristics. Annual return: {pos['annualized_return']:+.2f}%. Dividend yield: {pos['dividend_yield']:.2f}%."
+            else:  # long_high_vol or long_short
+                pos['rationale'] = f"High volatility of {pos['volatility']:.2f}% indicates potential for large price movements. Annual return: {pos['annualized_return']:+.2f}%."
 
         for i, pos in enumerate(short_positions, 1):
             pos['rank'] = i
-            pos['rationale'] = f"Low volatility of {pos['volatility']:.2f}% suggests price stability. Annual return: {pos['annualized_return']:.2f}%."
+            if portfolio_type == "short_only":
+                pos['rationale'] = f"High volatility of {pos['volatility']:.2f}% makes this suitable for shorting. Annual return: {pos['annualized_return']:+.2f}%."
+            else:  # long_short
+                pos['rationale'] = f"Low volatility of {pos['volatility']:.2f}% suggests price stability. Annual return: {pos['annualized_return']:+.2f}%."
 
         # Calculate portfolio statistics
-        avg_vol_long = np.mean([p['volatility'] for p in long_positions])
-        avg_vol_short = np.mean([p['volatility'] for p in short_positions])
+        avg_vol_long = np.mean([p['volatility'] for p in long_positions]) if long_positions else 0
+        avg_vol_short = np.mean([p['volatility'] for p in short_positions]) if short_positions else 0
 
-        # Create summary
-        summary = f"\n=== VOLATILITY-BASED PORTFOLIO (Period: {start_date} to {end_date}) ===\n\n"
-        summary += "LONG POSITIONS (High Volatility):\n"
-        for pos in long_positions:
-            summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
-            summary += f"      Price: ${pos['current_price']:.2f} | Volatility: {pos['volatility']:.2f}% | Return: {pos['annualized_return']:.2f}%\n"
-            summary += f"      {pos['rationale']}\n\n"
+        # Create summary based on portfolio type
+        portfolio_names = {
+            "long_low_vol": "Low-Volatility Long Portfolio (Defensive)",
+            "long_high_vol": "High-Volatility Long Portfolio (Aggressive)",
+            "short_only": "High-Volatility Short Portfolio",
+            "long_short": "Volatility-Based Long/Short Portfolio (Arbitrage)"
+        }
+        
+        summary = f"\n=== {portfolio_names.get(portfolio_type, 'VOLATILITY-BASED PORTFOLIO')} ===\n"
+        summary += f"Period: {start_date} to {end_date}\n\n"
+        
+        if long_positions:
+            if portfolio_type == "long_low_vol":
+                summary += "LONG POSITIONS (Low Volatility - Defensive):\n"
+            elif portfolio_type == "long_high_vol":
+                summary += "LONG POSITIONS (High Volatility - Aggressive):\n"
+            else:
+                summary += "LONG POSITIONS (High Volatility):\n"
+                
+            for pos in long_positions:
+                summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
+                summary += f"      Price: ${pos['current_price']:.2f} | Volatility: {pos['volatility']:.2f}% | Return: {pos['annualized_return']:+.2f}%"
+                if pos['dividend_yield'] > 0:
+                    summary += f" | Div Yield: {pos['dividend_yield']:.2f}%"
+                summary += f"\n      {pos['rationale']}\n\n"
 
-        summary += "\nSHORT POSITIONS (Low Volatility):\n"
-        for pos in short_positions:
-            summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
-            summary += f"      Price: ${pos['current_price']:.2f} | Volatility: {pos['volatility']:.2f}% | Return: {pos['annualized_return']:.2f}%\n"
-            summary += f"      {pos['rationale']}\n\n"
+        if short_positions:
+            summary += "\nSHORT POSITIONS (High Volatility):\n"
+            for pos in short_positions:
+                summary += f"  #{pos['rank']}. {pos['ticker']} ({pos['sector']})\n"
+                summary += f"      Price: ${pos['current_price']:.2f} | Volatility: {pos['volatility']:.2f}% | Return: {pos['annualized_return']:+.2f}%\n"
+                summary += f"      {pos['rationale']}\n\n"
 
         summary += f"\nPORTFOLIO STATISTICS:\n"
-        summary += f"  Average Volatility (Long): {avg_vol_long:.2f}%\n"
-        summary += f"  Average Volatility (Short): {avg_vol_short:.2f}%\n"
-        summary += f"  Volatility Spread: {avg_vol_long - avg_vol_short:.2f}%\n"
+        if long_positions:
+            summary += f"  Average Volatility (Long): {avg_vol_long:.2f}%\n"
+        if short_positions:
+            summary += f"  Average Volatility (Short): {avg_vol_short:.2f}%\n"
+        if long_positions and short_positions:
+            summary += f"  Volatility Spread: {avg_vol_long - avg_vol_short:.2f}%\n"
 
         # Create visualization
         viz_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "visualizations")
@@ -126,7 +182,8 @@ class VolatilityBasedPortfolioTool(BaseTool):
         viz_config = {
             "type": "volatility_portfolio",
             "id": viz_id,
-            "title": f"Volatility-Based Long/Short Portfolio ({start_date} to {end_date})",
+            "title": f"{portfolio_names.get(portfolio_type, 'Volatility Portfolio')} ({start_date} to {end_date})",
+            "portfolio_type": portfolio_type,
             "long_positions": long_positions,
             "short_positions": short_positions
         }
@@ -137,17 +194,23 @@ class VolatilityBasedPortfolioTool(BaseTool):
 
         summary += f"\nA portfolio visualization has been created (Visualization ID: {viz_id}).\n"
 
+        # Build statistics dict
+        statistics = {}
+        if long_positions:
+            statistics["avg_volatility_long"] = float(avg_vol_long)
+        if short_positions:
+            statistics["avg_volatility_short"] = float(avg_vol_short)
+        if long_positions and short_positions:
+            statistics["volatility_spread"] = float(avg_vol_long - avg_vol_short)
+
         result = {
             "success": True,
             "strategy": "volatility-based",
+            "portfolio_type": portfolio_type,
             "period": {"start": start_date, "end": end_date},
             "long_positions": long_positions,
             "short_positions": short_positions,
-            "statistics": {
-                "avg_volatility_long": float(avg_vol_long),
-                "avg_volatility_short": float(avg_vol_short),
-                "volatility_spread": float(avg_vol_long - avg_vol_short)
-            },
+            "statistics": statistics,
             "summary": summary,
             "visualization_id": viz_id
         }

@@ -1002,30 +1002,74 @@ def render_volatility_chart(config: dict):
 
 def render_volatility_portfolio(config: dict):
     """Render volatility-based portfolio recommendations."""
-    long_positions = config["long_positions"]
-    short_positions = config["short_positions"]
-
-    st.markdown("### Volatility-Based Portfolio: Long/Short Strategy")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("**🟢 Long Positions (High Volatility)**")
+    long_positions = config.get("long_positions", [])
+    short_positions = config.get("short_positions", [])
+    portfolio_type = config.get("portfolio_type", "long_short")
+    
+    # Render title
+    st.markdown(f"### {config.get('title', 'Volatility-Based Portfolio')}")
+    
+    # Determine layout based on what positions exist
+    has_long = len(long_positions) > 0
+    has_short = len(short_positions) > 0
+    
+    if has_long and has_short:
+        # Two columns for long/short
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**🟢 Long Positions**")
+            label = "High Volatility" if portfolio_type == "long_short" or portfolio_type == "long_high_vol" else "Low Volatility"
+            st.caption(label)
+            for i, p in enumerate(long_positions):
+                div_info = f" | Div: {p.get('dividend_yield', 0):.2f}%" if p.get('dividend_yield', 0) > 0 else ""
+                st.markdown(f"""
+                <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #4CAF50; background-color: var(--secondary-background-color);">
+                    <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> ({p.get('sector', 'N/A')})<br>
+                    <small>Vol: {p.get('volatility', 0):.2f}% | Return: {p.get('annualized_return', 0):+.2f}%{div_info}</small>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("**🔴 Short Positions**")
+            st.caption("Low Volatility" if portfolio_type == "long_short" else "High Volatility")
+            for i, p in enumerate(short_positions):
+                st.markdown(f"""
+                <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #F44336; background-color: var(--secondary-background-color);">
+                    <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> ({p.get('sector', 'N/A')})<br>
+                    <small>Vol: {p.get('volatility', 0):.2f}% | Return: {p.get('annualized_return', 0):+.2f}%</small>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    elif has_long:
+        # Only long positions - single column
+        st.markdown("**🟢 Long Positions**")
+        if portfolio_type == "long_low_vol":
+            st.caption("Low Volatility - Defensive Strategy")
+        else:
+            st.caption("High Volatility - Aggressive Strategy")
+        
         for i, p in enumerate(long_positions):
+            div_info = f" | Div: {p.get('dividend_yield', 0):.2f}%" if p.get('dividend_yield', 0) > 0 else ""
             st.markdown(f"""
-            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #4CAF50; background-color: var(--secondary-background-color);">
+            <div style="padding: 10px; margin: 6px 0; border-left: 4px solid #4CAF50; background-color: var(--secondary-background-color);">
                 <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> ({p.get('sector', 'N/A')})<br>
-                <small>Vol: {p.get('volatility', 0):.2f}% | Return: {p.get('annualized_return', 0):+.2f}%</small>
+                <small>Vol: {p.get('volatility', 0):.2f}% | Return: {p.get('annualized_return', 0):+.2f}%{div_info}</small><br>
+                <small style="color: var(--text-color); opacity: 0.8;">{p.get('rationale', '')}</small>
             </div>
             """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("**🔴 Short Positions (Low Volatility)**")
+    
+    elif has_short:
+        # Only short positions - single column
+        st.markdown("**🔴 Short Positions**")
+        st.caption("High Volatility")
+        
         for i, p in enumerate(short_positions):
             st.markdown(f"""
-            <div style="padding: 8px; margin: 4px 0; border-left: 3px solid #F44336; background-color: var(--secondary-background-color);">
+            <div style="padding: 10px; margin: 6px 0; border-left: 4px solid #F44336; background-color: var(--secondary-background-color);">
                 <strong>#{p.get('rank', i+1)}. {p['ticker']}</strong> ({p.get('sector', 'N/A')})<br>
-                <small>Vol: {p.get('volatility', 0):.2f}% | Return: {p.get('annualized_return', 0):+.2f}%</small>
+                <small>Vol: {p.get('volatility', 0):.2f}% | Return: {p.get('annualized_return', 0):+.2f}%</small><br>
+                <small style="color: var(--text-color); opacity: 0.8;">{p.get('rationale', '')}</small>
             </div>
             """, unsafe_allow_html=True)
 
