@@ -163,13 +163,16 @@ class UnifiedTransductionTool(BaseTool):
                 # This is more memory-efficient than loading the entire file
                 csv_buffer = io.StringIO()
                 chunk_df.to_csv(csv_buffer, index=False)
-                csv_buffer.seek(0)
+                csv_string = csv_buffer.getvalue()
+                csv_buffer.close()
 
                 # Free memory
                 del chunk_df
+                del csv_buffer
 
-                # Load into Agentics from the in-memory CSV
-                agentics = AG.from_csv(csv_buffer)
+                # Load into Agentics from the CSV string
+                # AG.from_csv() can accept a string directly
+                agentics = AG.from_csv(csv_string)
                 print(f"✅ Agentics object created with {len(agentics.states):,} states")
 
                 # Memory check after loading
@@ -197,7 +200,8 @@ class UnifiedTransductionTool(BaseTool):
                 # Fallback to original method if optimization fails
                 print(f"⚠️  Memory optimization failed: {e}")
                 print(f"🔄 Falling back to standard loading method...")
-                traceback.print_exc()
+                print(f"Error details: {str(e)}")
+                print(f"Error type: {type(e).__name__}")
 
                 try:
                     # Load the full dataset (original method)
@@ -430,7 +434,6 @@ class UnifiedTransductionTool(BaseTool):
                 })
 
         except Exception as e:
-            import traceback
             error_msg = str(e)
             error_trace = traceback.format_exc()
 
