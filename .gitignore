@@ -43,3 +43,6 @@ visualizations/*.json
 .DS_Store
 Thumbs.db
 
+# Temporary combined CSV file (created when reading split files)
+data/merged_data_combined_temp.csv
+

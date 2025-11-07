@@ -4,54 +4,28 @@ Financial Analyst Agent Configuration
 
 from agentics import AG
 from crewai import Agent, Task, Crew
+import json
 from tools import (
-    DateRangeQueryTool,
-    IndicatorStatsTool,
+    # Data query tools
     AvailableIndicatorsTool,
-    VolatilityAnalysisTool,
-    CorrelationAnalysisTool,
-    FindExtremeValuesTool,
+    # Visualization tools
     TimeSeriesPlotTool,
     CorrelationHeatmapTool,
     VolatilityPlotTool,
     DistributionPlotTool,
-    ReturnsAnalysisTool,
-    DrawdownAnalysisTool,
-    MovingAverageTool,
-    PercentageChangeTool,
-    YearOverYearTool,
     ScatterPlotTool,
     ComparativePerformanceTool,
     MovingAveragePlotTool,
     DrawdownChartTool,
     MultiIndicatorPlotTool,
-    HeadlinesFetcherTool,
-    VolatilityNewsCorrelationTool,
-    EventTimelineTool,
-    ComprehensiveVolatilityExplanationTool,
-    IdentifyCorrelatedMovementsTool,
-    CompanyFundamentalsQueryTool,
-    CompareFundamentalsTool,
-    ScreenCompaniesTool,
-    CompanyValuationTool,
-    FundamentalHistoryTool,
-    PortfolioRecommendationTool,
-    FundamentalMacroCorrelationTool,
-    SectorAnalysisTool,
     CompanyComparisonChartTool,
     FundamentalTimeSeriesPlotTool,
     ValuationScatterPlotTool,
     PortfolioRecommendationChartTool,
-    DJ30ReturnsAnalysisTool,
-    DJ30VolatilityAnalysisTool,
-    PerformanceComparisonTool,
-    PriceRangeAnalysisTool,
-    VolatilityBasedPortfolioTool,
-    MomentumBasedPortfolioTool,
-    SectorDiversifiedPortfolioTool,
     PriceChartTool,
     PerformanceComparisonChartTool,
     VolatilityChartTool,
+    # Transduction tool
     UnifiedTransductionTool,
 )
 import os
@@ -61,144 +35,51 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def get_tool_categories():
+def create_financial_analyst_agent():
     """
-    Get list of all available tool categories with descriptions.
-
-    Returns:
-        dict: Dictionary mapping category names to descriptions
-    """
-    return {
-        "Data Query": "Query financial data by date range, get indicator statistics",
-        "Basic Analysis": "Volatility, correlation, and extreme value analysis",
-        "Advanced Analysis": "Returns, drawdowns, moving averages, YoY analysis",
-        "News & Events": "Fetch headlines and correlate with market events",
-        "Volatility Explanation": "Comprehensive volatility analysis with context",
-        "Company Fundamentals": "Query and compare company fundamental data",
-        "Portfolio & Strategy": "Generate portfolio recommendations and strategies",
-        "Basic Visualizations": "Time series, heatmaps, distributions",
-        "Advanced Visualizations": "Scatter plots, comparative charts, drawdown plots",
-        "Fundamental Visualizations": "Company comparison charts, valuation plots",
-        "DJ30 Price Analysis": "Analyze DJ30 stock returns, volatility, performance",
-        "DJ30 Portfolios": "Construct volatility/momentum/sector-based portfolios",
-        "DJ30 Visualizations": "Price charts, performance comparisons for DJ30 stocks",
-        "Advanced Transduction": "Deep analysis using AI-powered data reduction",
-    }
-
-
-def create_financial_analyst_agent(enabled_tool_categories=None):
-    """
-    Create a financial analyst agent with access to data analysis and visualization tools.
-
-    Args:
-        enabled_tool_categories: List of tool category names to enable. If None, all tools are enabled.
+    Create a financial analyst agent with access to transduction and visualization tools.
 
     Returns:
         Agent: Configured CrewAI agent
     """
-
     # Initialize LLM
     llm = AG.get_llm_provider()
 
-    # Organize tools by category
-    all_tools = {
-        "Data Query": [
-            AvailableIndicatorsTool(),
-            DateRangeQueryTool(),
-            IndicatorStatsTool(),
-        ],
-        "Basic Analysis": [
-            VolatilityAnalysisTool(),
-            CorrelationAnalysisTool(),
-            FindExtremeValuesTool(),
-        ],
-        "Advanced Analysis": [
-            ReturnsAnalysisTool(),
-            DrawdownAnalysisTool(),
-            MovingAverageTool(),
-            PercentageChangeTool(),
-            YearOverYearTool(),
-        ],
-        "News & Events": [
-            HeadlinesFetcherTool(),
-            VolatilityNewsCorrelationTool(),
-            EventTimelineTool(),
-        ],
-        "Volatility Explanation": [
-            ComprehensiveVolatilityExplanationTool(),
-            IdentifyCorrelatedMovementsTool(),
-        ],
-        "Company Fundamentals": [
-            CompanyFundamentalsQueryTool(),
-            CompareFundamentalsTool(),
-            ScreenCompaniesTool(),
-            CompanyValuationTool(),
-            FundamentalHistoryTool(),
-        ],
-        "Portfolio & Strategy": [
-            PortfolioRecommendationTool(),
-            FundamentalMacroCorrelationTool(),
-            SectorAnalysisTool(),
-        ],
-        "Basic Visualizations": [
-            TimeSeriesPlotTool(),
-            CorrelationHeatmapTool(),
-            VolatilityPlotTool(),
-            DistributionPlotTool(),
-        ],
-        "Advanced Visualizations": [
-            ScatterPlotTool(),
-            ComparativePerformanceTool(),
-            MovingAveragePlotTool(),
-            DrawdownChartTool(),
-            MultiIndicatorPlotTool(),
-        ],
-        "Fundamental Visualizations": [
-            CompanyComparisonChartTool(),
-            FundamentalTimeSeriesPlotTool(),
-            ValuationScatterPlotTool(),
-        ],
-        "DJ30 Price Analysis": [
-            DJ30ReturnsAnalysisTool(),
-            DJ30VolatilityAnalysisTool(),
-            PerformanceComparisonTool(),
-            PriceRangeAnalysisTool(),
-        ],
-        "DJ30 Portfolios": [
-            VolatilityBasedPortfolioTool(),
-            MomentumBasedPortfolioTool(),
-            SectorDiversifiedPortfolioTool(),
-        ],
-        "DJ30 Visualizations": [
-            PriceChartTool(),
-            PerformanceComparisonChartTool(),
-            VolatilityChartTool(),
-        ],
-        "Advanced Transduction": [
-            UnifiedTransductionTool(),
-        ],
-    }
-
-    # Filter tools based on enabled categories
-    if enabled_tool_categories is None:
-        # Enable all tools if no filter specified
-        tools = []
-        for category_tools in all_tools.values():
-            tools.extend(category_tools)
-    else:
-        # Enable only selected categories
-        tools = []
-        for category in enabled_tool_categories:
-            if category in all_tools:
-                tools.extend(all_tools[category])
+    # All available tools (transduction + visualizations)
+    tools = [
+        # Data query tools
+        AvailableIndicatorsTool(),
+        # Transduction tool
+        UnifiedTransductionTool(),
+        # Basic visualization tools
+        TimeSeriesPlotTool(),
+        CorrelationHeatmapTool(),
+        VolatilityPlotTool(),
+        DistributionPlotTool(),
+        # Advanced visualization tools
+        ScatterPlotTool(),
+        ComparativePerformanceTool(),
+        MovingAveragePlotTool(),
+        DrawdownChartTool(),
+        MultiIndicatorPlotTool(),
+        # Fundamental visualization tools
+        CompanyComparisonChartTool(),
+        FundamentalTimeSeriesPlotTool(),
+        ValuationScatterPlotTool(),
+        PortfolioRecommendationChartTool(),
+        # DJ30 visualization tools
+        PriceChartTool(),
+        PerformanceComparisonChartTool(),
+        VolatilityChartTool(),
+    ]
 
     # Create agent
     agent = Agent(
         role="Senior Financial Data Analyst",
         goal=(
-            "Provide comprehensive analysis of financial and macroeconomic data. "
-            "Answer user questions with data-driven insights, statistical analysis, "
-            "and clear visualizations."
+            "Provide comprehensive analysis of financial and macroeconomic data using "
+            "AI-powered transduction and visualization tools. Answer user questions with "
+            "data-driven insights, statistical analysis, and clear visualizations."
         ),
         backstory=(
             "You are an expert financial analyst with deep knowledge of macroeconomics, "
@@ -208,14 +89,10 @@ def create_financial_analyst_agent(enabled_tool_categories=None):
             "3) Company fundamentals (61 publicly traded companies with EPS, ROE, ROA, P/E ratios, margins, etc.) "
             "4) DJ30 stock price data (30 Dow Jones Industrial Average stocks with daily OHLCV data from 2008-2025) "
             "All data spans from 2008 to present. "
-            "You excel at identifying trends, correlations, anomalies, and investment opportunities. "
-            "You can analyze company fundamentals, compare valuations, screen for opportunities, "
-            "and generate long/short portfolio recommendations based on fundamental strength, "
-            "macro context, and relative valuations. You also specialize in technical analysis, "
-            "price momentum strategies, volatility-based trading, and quantitative portfolio construction. "
-            "When users ask questions, you use your tools to query data, perform analysis, "
-            "and create visualizations to support your insights. You always provide context "
-            "and explain your findings in clear, accessible language."
+            "You specialize in using AI-powered transduction to analyze complex financial questions "
+            "by reducing large datasets into meaningful insights. You can create visualizations to "
+            "support your analysis and help users understand patterns, trends, and relationships in the data. "
+            "You always provide context and explain your findings in clear, accessible language."
         ),
         tools=tools,
         llm=llm,
@@ -227,78 +104,7 @@ def create_financial_analyst_agent(enabled_tool_categories=None):
     return agent
 
 
-def generate_tool_instructions(enabled_tool_categories: list = None) -> str:
-    """
-    Generate dynamic tool instructions based on enabled tool categories.
-
-    Args:
-        enabled_tool_categories: List of enabled tool category names
-
-    Returns:
-        str: Formatted tool instructions
-    """
-    if not enabled_tool_categories:
-        # If no categories specified, return general instructions
-        return (
-            "Answer the user's queries based on your own knowledge. Do so succinctly and briefly (max 1 paragraph, important!).\n"
-        )
-
-    instructions = []
-
-    # Category-specific instructions
-    if "Data Query" in enabled_tool_categories:
-        instructions.append("   - For SPECIFIC DATA VALUES: Use DateRangeQueryTool, IndicatorStatsTool, AvailableIndicatorsTool")
-
-    if "Basic Analysis" in enabled_tool_categories:
-        instructions.append("   - For VOLATILITY & CORRELATION: Use VolatilityAnalysisTool, CorrelationAnalysisTool, FindExtremeValuesTool")
-
-    if "Advanced Analysis" in enabled_tool_categories:
-        instructions.append("   - For RETURNS & PERFORMANCE: Use ReturnsAnalysisTool, DrawdownAnalysisTool, MovingAverageTool, PercentageChangeTool, YearOverYearTool")
-
-    if "News & Events" in enabled_tool_categories:
-        instructions.append("   - For NEWS CORRELATION: Use HeadlinesFetcherTool, VolatilityNewsCorrelationTool, EventTimelineTool")
-
-    if "Volatility Explanation" in enabled_tool_categories:
-        instructions.append("   - For COMPREHENSIVE VOLATILITY: Use ComprehensiveVolatilityExplanationTool, IdentifyCorrelatedMovementsTool")
-
-    if "Company Fundamentals" in enabled_tool_categories:
-        instructions.append("   - For COMPANY ANALYSIS: Use CompanyFundamentalsQueryTool, CompareFundamentalsTool, ScreenCompaniesTool, CompanyValuationTool, FundamentalHistoryTool")
-        instructions.append("   - For COMPANY COMPARISONS: Use CompareFundamentalsTool for analysis, CompanyComparisonChartTool for visualization")
-
-    if "Portfolio & Strategy" in enabled_tool_categories:
-        instructions.append("   - For PORTFOLIO RECOMMENDATIONS (fundamentals-based): Use PortfolioRecommendationTool")
-        instructions.append("   - For MACRO CORRELATIONS: Use FundamentalMacroCorrelationTool, SectorAnalysisTool")
-
-    if "Basic Visualizations" in enabled_tool_categories:
-        instructions.append("   - For BASIC CHARTS: Use TimeSeriesPlotTool, CorrelationHeatmapTool, VolatilityPlotTool, DistributionPlotTool")
-
-    if "Advanced Visualizations" in enabled_tool_categories:
-        instructions.append("   - For ADVANCED CHARTS: Use ScatterPlotTool, ComparativePerformanceTool, MovingAveragePlotTool, DrawdownChartTool, MultiIndicatorPlotTool")
-
-    if "Fundamental Visualizations" in enabled_tool_categories:
-        instructions.append("   - For FUNDAMENTAL CHARTS: Use CompanyComparisonChartTool, FundamentalTimeSeriesPlotTool, ValuationScatterPlotTool")
-
-    if "DJ30 Price Analysis" in enabled_tool_categories:
-        instructions.append("   - For DJ30 PRICE ANALYSIS: Use DJ30ReturnsAnalysisTool, DJ30VolatilityAnalysisTool, PerformanceComparisonTool, PriceRangeAnalysisTool")
-
-    if "DJ30 Portfolios" in enabled_tool_categories:
-        instructions.append("   - For DJ30 PORTFOLIOS: Use VolatilityBasedPortfolioTool, MomentumBasedPortfolioTool, SectorDiversifiedPortfolioTool")
-        instructions.append("   - IMPORTANT: DJ30 portfolio tools automatically create visualizations and return Visualization IDs")
-        instructions.append("   - Always include the Visualization ID in your response when one is generated")
-
-    if "DJ30 Visualizations" in enabled_tool_categories:
-        instructions.append("   - For DJ30 PRICE CHARTS: Use PriceChartTool (candlestick/OHLC), PerformanceComparisonChartTool, VolatilityChartTool")
-
-    if "Advanced Transduction" in enabled_tool_categories:
-        instructions.append("   - For COMPLEX QUESTIONS that standard tools cannot answer: Use UnifiedTransductionTool (specify dataset: macro/market/dj30/firm)")
-
-    # Add general guidance
-    instructions.append("   - DO NOT query data before creating visualizations (it creates token overload)")
-
-    return "\n".join(instructions) + "\n"
-
-
-def create_analysis_task(agent: Agent, user_question: str, conversation_history: list = None, enabled_tool_categories: list = None) -> Task:
+def create_analysis_task(agent: Agent, user_question: str, conversation_history: list = None, selected_columns: list = None) -> Task:
     """
     Create a task for the financial analyst agent.
 
@@ -306,7 +112,6 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
         agent: The agent to assign the task to
         user_question: The user's question or request
         conversation_history: List of previous messages for context
-        enabled_tool_categories: List of enabled tool categories to customize instructions
 
     Returns:
         Task: Configured CrewAI task
@@ -321,8 +126,12 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             context += f"{role}: {content}\n\n"
         context += "---\n\n"
 
-    # Generate dynamic tool instructions based on enabled categories
-    tool_instructions = generate_tool_instructions(enabled_tool_categories)
+    # Build column selection instruction
+    column_instruction = ""
+    if selected_columns and len(selected_columns) > 0:
+        column_instruction = f"     * IMPORTANT: The user has selected specific columns to analyze. When calling UnifiedTransductionTool, you MUST include the selected_columns parameter with this exact Python list: {json.dumps(selected_columns)}\n"
+    else:
+        column_instruction = "     * Note: If no columns are selected, all columns will be analyzed\n"
 
     task = Task(
         description=(
@@ -331,8 +140,23 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             "Instructions:\n"
             "1. Analyze the current question in the context of the conversation history\n"
             "2. If the question refers to a previous topic (e.g., 'similar analysis', 'same indicator'), use that context\n"
-            f"3. Choose the right tools for the task (you have access to these categories: {', '.join(enabled_tool_categories) if enabled_tool_categories else 'all'}):\n"
-            f"{tool_instructions}"
+            "3. Choose the right tools for the task:\n"
+            "   - For DISCOVERING AVAILABLE INDICATORS: Use AvailableIndicatorsTool FIRST if you need to know what indicators are available\n"
+            "     * Use this tool when you need to find valid indicator names for visualization tools\n"
+            "     * Especially important before using ComparativePerformanceTool, TimeSeriesPlotTool, or MultiIndicatorPlotTool\n"
+            "     * Returns lists of macroeconomic indicators, market factors, DJ30 stock tickers, and fundamental metrics\n"
+            "   - For COMPLEX QUESTIONS requiring deep analysis: Use UnifiedTransductionTool\n"
+            "     * Use this for questions about patterns, relationships, cause-effect analysis, or comprehensive summaries\n"
+            "     * The transduction tool analyzes a comprehensive merged dataset containing macroeconomic indicators, market factors, DJ30 stock prices, company fundamentals, and news data\n"
+            "     * The tool can analyze large date ranges and synthesize insights from multiple data points\n"
+            f"{column_instruction}"
+            "   - For VISUALIZATIONS: Use visualization tools to create charts and plots\n"
+            "     * IMPORTANT: If you're unsure about valid indicator names, use AvailableIndicatorsTool first\n"
+            "     * TimeSeriesPlotTool, CorrelationHeatmapTool, VolatilityPlotTool, DistributionPlotTool for basic charts\n"
+            "     * ScatterPlotTool, ComparativePerformanceTool, MovingAveragePlotTool, DrawdownChartTool, MultiIndicatorPlotTool for advanced charts\n"
+            "     * CompanyComparisonChartTool, FundamentalTimeSeriesPlotTool, ValuationScatterPlotTool for fundamental analysis charts\n"
+            "     * PriceChartTool, PerformanceComparisonChartTool, VolatilityChartTool for DJ30 stock charts\n"
+            "   - DO NOT query data before creating visualizations (it creates token overload)\n"
             "4. Provide a comprehensive, well-structured answer with:\n"
             "   - Key findings and insights\n"
             "   - Statistical evidence and data points\n"
@@ -355,22 +179,22 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
     return task
 
 
-def run_analysis(user_question: str, conversation_history: list = None, enabled_tool_categories: list = None) -> str:
+def run_analysis(user_question: str, conversation_history: list = None, selected_columns: list = None) -> str:
     """
     Run a complete analysis for a user question with conversation context.
 
     Args:
         user_question: The user's question
         conversation_history: List of previous messages for context
-        enabled_tool_categories: List of tool category names to enable. If None, all tools are enabled.
+        selected_columns: List of column names to include in transduction analysis
 
     Returns:
         str: The agent's analysis and response
     """
     try:
-        # Create agent and task with filtered tools
-        agent = create_financial_analyst_agent(enabled_tool_categories=enabled_tool_categories)
-        task = create_analysis_task(agent, user_question, conversation_history, enabled_tool_categories)
+        # Create agent and task
+        agent = create_financial_analyst_agent()
+        task = create_analysis_task(agent, user_question, conversation_history, selected_columns)
 
         # Create crew and run
         crew = Crew(
@@ -385,4 +209,3 @@ def run_analysis(user_question: str, conversation_history: list = None, enabled_
 
     except Exception as e:
         return f"Error during analysis: {str(e)}"
-

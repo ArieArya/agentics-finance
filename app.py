@@ -15,7 +15,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from agents import run_analysis, get_tool_categories
+from agents import run_analysis
 from utils import get_data_summary, get_column_descriptions, get_firm_data_summary, get_firm_column_descriptions, get_dj30_data_summary, get_dj30_column_descriptions
 
 # Page configuration
@@ -106,9 +106,224 @@ if "agent_logs" not in st.session_state:
 if "show_logs" not in st.session_state:
     st.session_state.show_logs = True
 
-if "enabled_tool_categories" not in st.session_state:
-    # Enable all categories by default
-    st.session_state.enabled_tool_categories = list(get_tool_categories().keys())
+if "selected_transduction_columns" not in st.session_state:
+    st.session_state.selected_transduction_columns = []
+
+if "transduction_flow" not in st.session_state:
+    st.session_state.transduction_flow = None
+
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Chat"
+
+
+def get_merged_data_columns():
+    """Get all column names from merged_data.csv (or split files)."""
+    from utils.csv_reader import read_merged_data_header
+
+    try:
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        header = read_merged_data_header(data_dir)
+        return header
+    except Exception as e:
+        st.error(f"Error reading column names: {e}")
+        return []
+
+
+def display_transduction_flow():
+    """Display the transduction flow visualization."""
+    st.markdown('<div class="main-header">Transduction Flow</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Visualize how data flows through the transduction process</div>', unsafe_allow_html=True)
+
+    if not st.session_state.transduction_flow:
+        st.info("💡 No transduction flow data available. Run a transduction analysis in the Chat page to see the flow here.")
+        return
+
+    flow = st.session_state.transduction_flow
+
+    # Helper function to get Pydantic model definition
+    def get_model_definition(model_class):
+        """Get the Pydantic model definition as a string."""
+        try:
+            import inspect
+            from typing import Union, get_origin, get_args
+            # Try to get source code
+            try:
+                source = inspect.getsource(model_class)
+                return source
+            except (OSError, TypeError):
+                # If source not available, reconstruct from model_fields
+                if hasattr(model_class, 'model_fields'):
+                    lines = [f"class {model_class.__name__}(BaseModel):"]
+                    for field_name, field_info in model_class.model_fields.items():
+                        # Get field type annotation
+                        field_type = field_info.annotation
+                        field_type_str = None
+
+                        # Handle Union types (including Optional)
+                        origin = get_origin(field_type)
+                        if origin is Union:
+                            args = get_args(field_type)
+                            # Check if it's Optional (Union with None)
+                            non_none_args = [arg for arg in args if arg is not type(None)]
+                            if len(non_none_args) == 1 and len(args) == 2:
+                                # It's Optional[T]
+                                type_name = getattr(non_none_args[0], '__name__', str(non_none_args[0]))
+                                field_type_str = f"{type_name} | None"
+                            else:
+                                # It's a Union of multiple types
+                                type_names = [getattr(arg, '__name__', str(arg)) for arg in non_none_args]
+                                field_type_str = " | ".join(type_names)
+                        else:
+                            # Regular type
+                            field_type_str = getattr(field_type, '__name__', str(field_type))
+
+                        # Get default value
+                        default = field_info.default
+                        if default is None:
+                            default_str = "None"
+                        elif isinstance(default, str):
+                            default_str = f'"{default}"'
+                        else:
+                            default_str = str(default)
+
+                        # Get description if available
+                        description = field_info.description
+                        if description:
+                            # Escape quotes in description
+                            description_escaped = description.replace('"', '\\"')
+                            lines.append(f"    {field_name}: {field_type_str} = Field(")
+                            lines.append(f"        {default_str},")
+                            lines.append(f'        description="{description_escaped}"')
+                            lines.append(f"    )")
+                        else:
+                            lines.append(f"    {field_name}: {field_type_str} = {default_str}")
+
+                    return "\n".join(lines)
+                else:
+                    return f"class {model_class.__name__}(BaseModel):\n    # Model definition not available"
+        except Exception as e:
+            return f"# Error getting model definition: {e}"
+
+    # Helper function to convert AG to dataframe
+    def ag_to_df(ag_obj):
+        """Convert an AG object to a pandas DataFrame."""
+        try:
+            if hasattr(ag_obj, 'to_dataframe'):
+                return ag_obj.to_dataframe()
+            elif hasattr(ag_obj, 'states'):
+                # Convert states directly to dataframe
+                data = [state.model_dump() for state in ag_obj.states]
+                return pd.DataFrame(data)
+            else:
+                return pd.DataFrame()
+        except Exception as e:
+            st.warning(f"Error converting to dataframe: {e}")
+            return pd.DataFrame()
+
+    # Helper function to convert batch results to dataframe
+    def batches_to_df(batches):
+        """Convert a list of batch results to a pandas DataFrame."""
+        try:
+            data = []
+            for batch in batches:
+                if hasattr(batch, 'model_dump'):
+                    data.append(batch.model_dump())
+                elif isinstance(batch, dict):
+                    data.append(batch)
+                else:
+                    # Try to convert to dict
+                    data.append({"result": str(batch)})
+            return pd.DataFrame(data)
+        except Exception as e:
+            st.warning(f"Error converting batches to dataframe: {e}")
+            return pd.DataFrame()
+
+    # 1. Initial States
+    if "initial_states" in flow:
+        st.markdown("---")
+        st.markdown(f"### 1️⃣ Initial States")
+        st.markdown(f"**Pydantic Class:** `{flow['initial_states']['atype_name']}`")
+
+        # Display model definition
+        if hasattr(flow['initial_states']['agentics'], 'atype') and flow['initial_states']['agentics'].atype:
+            model_def = get_model_definition(flow['initial_states']['agentics'].atype)
+            with st.expander("📋 View Model Definition", expanded=False):
+                st.code(model_def, language="python")
+
+        st.markdown(f"**Number of Rows:** {flow['initial_states']['num_rows']}")
+
+        initial_df = ag_to_df(flow['initial_states']['agentics'])
+        if not initial_df.empty:
+            st.dataframe(initial_df, use_container_width=True, height=800)
+        else:
+            st.warning("Could not convert initial states to dataframe")
+
+    # 2. Intermediate Batches
+    if "intermediate_batches" in flow and flow['intermediate_batches']['batches']:
+        st.markdown("---")
+        st.markdown(f"### 2️⃣ Intermediate Batches")
+        st.markdown(f"**Pydantic Class:** `{flow['intermediate_batches']['atype_name']}`")
+
+        # Display model definition - get it from the first batch
+        if flow['intermediate_batches']['batches']:
+            first_batch = flow['intermediate_batches']['batches'][0]
+            if hasattr(first_batch, '__class__'):
+                model_def = get_model_definition(first_batch.__class__)
+                with st.expander("📋 View Model Definition", expanded=False):
+                    st.code(model_def, language="python")
+
+        st.markdown(f"**Number of Batches:** {flow['intermediate_batches']['num_batches']}")
+
+        batches_df = batches_to_df(flow['intermediate_batches']['batches'])
+        if not batches_df.empty:
+            # Add batch number column
+            batches_df.insert(0, 'Batch #', range(1, len(batches_df) + 1))
+            st.dataframe(batches_df, use_container_width=True, height=400)
+        else:
+            st.warning("Could not convert intermediate batches to dataframe")
+
+    # 3. Final Intermediate Result
+    if "final_intermediate" in flow:
+        st.markdown("---")
+        st.markdown(f"### 3️⃣ Final Intermediate Result")
+        st.markdown(f"**Pydantic Class:** `{flow['final_intermediate']['atype_name']}`")
+
+        # Display model definition
+        if hasattr(flow['final_intermediate']['agentics'], 'atype') and flow['final_intermediate']['agentics'].atype:
+            model_def = get_model_definition(flow['final_intermediate']['agentics'].atype)
+            with st.expander("📋 View Model Definition", expanded=False):
+                st.code(model_def, language="python")
+
+        st.markdown(f"**Number of Rows:** {flow['final_intermediate']['num_rows']}")
+
+        final_intermediate_df = ag_to_df(flow['final_intermediate']['agentics'])
+        if not final_intermediate_df.empty:
+            st.dataframe(final_intermediate_df, use_container_width=True, height=50)
+        else:
+            st.warning("Could not convert final intermediate result to dataframe")
+
+    # 4. Final Answer
+    if "final_answer" in flow:
+        st.markdown("---")
+        st.markdown(f"### 4️⃣ Final Answer")
+        st.markdown(f"**Pydantic Class:** `{flow['final_answer']['atype_name']}`")
+
+        # Display model definition
+        if hasattr(flow['final_answer']['agentics'], 'atype') and flow['final_answer']['agentics'].atype:
+            model_def = get_model_definition(flow['final_answer']['agentics'].atype)
+            with st.expander("📋 View Model Definition", expanded=False):
+                st.code(model_def, language="python")
+
+        st.markdown(f"**Number of Rows:** {flow['final_answer']['num_rows']}")
+
+        final_answer_df = ag_to_df(flow['final_answer']['agentics'])
+        if not final_answer_df.empty:
+            st.dataframe(final_answer_df, use_container_width=True, height=50)
+        else:
+            st.warning("Could not convert final answer to dataframe")
+
+    st.markdown("---")
+    st.caption("💡 This flow shows how your data is transformed through the transduction process. Each stage reduces the data while preserving key insights.")
 
 
 def clean_old_visualizations():
@@ -1235,7 +1450,7 @@ def render_sector_portfolio(config: dict):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def run_analysis_with_logs(user_input: str, conversation_history: list, enabled_tool_categories: list = None) -> str:
+def run_analysis_with_logs(user_input: str, conversation_history: list, selected_columns: list = None) -> str:
     """Run analysis and capture stdout/stderr to display in logs."""
     # Create a StringIO object to capture output
     captured_output = StringIO()
@@ -1247,8 +1462,8 @@ def run_analysis_with_logs(user_input: str, conversation_history: list, enabled_
         sys.stdout = captured_output
         sys.stderr = captured_output
 
-        # Run the analysis with filtered tools
-        response = run_analysis(user_input, conversation_history, enabled_tool_categories=enabled_tool_categories)
+        # Run the analysis with selected columns
+        response = run_analysis(user_input, conversation_history, selected_columns)
 
         # Restore original stdout/stderr
         sys.stdout = original_stdout
@@ -1361,44 +1576,134 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Tool Category Filter
-    with st.expander("🔧 Tools", expanded=False):
-        st.markdown("**Select which tools to enable:**")
+    # Transduction Column Selection
+    with st.expander("🔧 Transduction Column Selection", expanded=False):
+        st.markdown("**Select columns to include in transduction analysis:**")
+        st.caption("Date column is always included. Select additional columns to analyze.")
 
-        tool_categories = get_tool_categories()
-        selected_categories = []
+        all_columns = get_merged_data_columns()
+        if all_columns:
+            # Search box to filter columns
+            search_term = st.text_input("🔍 Search columns:", placeholder="Type to filter columns...", key="column_search")
 
-        # Create checkboxes for each category (except Data Query)
-        for category, description in tool_categories.items():
-            # Check if category is currently enabled
-            is_enabled = category in st.session_state.enabled_tool_categories
+            # Filter columns based on search
+            if search_term:
+                search_lower = search_term.lower()
+                all_columns = [col for col in all_columns if search_lower in col.lower()]
+                if not all_columns:
+                    st.info("No columns match your search.")
+                    st.stop()
+            # Separate Date from other columns
+            date_col = "Date"
+            other_columns = [col for col in all_columns if col != date_col]
 
-            # Create checkbox with description
-            checkbox_value = st.checkbox(
-                f"**{category}**",
-                value=is_enabled,
-                key=f"tool_cat_{category}",
-                help=description
-            )
+            # Group columns by category for better UX
+            macro_cols = [col for col in other_columns if col in ['FEDFUNDS', 'TB3MS', 'T10Y3M', 'CPIAUCSL', 'CPILFESL', 'PCEPI', 'PCEPILFE', 'UNRATE', 'PAYEMS', 'INDPRO', 'RSAFS']]
+            market_cols = [col for col in other_columns if col.startswith('^') or col in ['BTC-USD', 'GSG', 'DGS2', 'DGS10', 'DTWEXBGS', 'DCOILBRENTEU', 'GLD', 'US10Y2Y', 'Headlines']]
+            dj30_price_cols = [col for col in other_columns if any(col.startswith(prefix) for prefix in ['open_', 'high_', 'low_', 'close_', 'adj_close_', 'volume_', 'dividend_'])]
+            fundamental_cols = [col for col in other_columns if any(col.endswith(suffix) for suffix in ['_MEDEST', '_MEANEST', '_ACTUAL'])]
+            news_cols = [col for col in other_columns if col.startswith('news_') or col.startswith('Earningcall_')]
+            other_cols = [col for col in other_columns if col not in macro_cols + market_cols + dj30_price_cols + fundamental_cols + news_cols]
 
-            # Show description below checkbox
-            if checkbox_value:
-                st.caption(f"✓ {description}")
-                selected_categories.append(category)
-            else:
-                st.caption(f"  {description}")
+            # Initialize selected columns if empty
+            if not st.session_state.selected_transduction_columns:
+                st.session_state.selected_transduction_columns = []
 
-        st.markdown("---")
+            # Category selection with checkboxes
+            selected = []
 
-        # Update session state if selection changed
-        if set(selected_categories) != set(st.session_state.enabled_tool_categories):
-            st.session_state.enabled_tool_categories = selected_categories
+            # Macro columns
+            if macro_cols:
+                with st.expander(f"📊 Macroeconomic Indicators ({len(macro_cols)})", expanded=False):
+                    for col in sorted(macro_cols):
+                        is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                        if is_checked:
+                            selected.append(col)
 
-        # Show currently enabled tools count
-        total_categories = len(tool_categories)
-        enabled_count = len(selected_categories)
-        st.caption(f"📊 **{enabled_count}/{total_categories} optional tool categories enabled**")
+            # Market columns
+            if market_cols:
+                with st.expander(f"📈 Market Factors ({len(market_cols)})", expanded=False):
+                    for col in sorted(market_cols):
+                        is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                        if is_checked:
+                            selected.append(col)
 
+            # DJ30 Price columns
+            if dj30_price_cols:
+                with st.expander(f"💹 DJ30 Stock Prices ({len(dj30_price_cols)})", expanded=False):
+                    # Group by ticker for better organization
+                    ticker_groups = {}
+                    for col in dj30_price_cols:
+                        parts = col.split('_')
+                        if len(parts) >= 2:
+                            ticker = parts[-1]  # Last part is usually ticker
+                            if ticker not in ticker_groups:
+                                ticker_groups[ticker] = []
+                            ticker_groups[ticker].append(col)
+
+                    for ticker in sorted(ticker_groups.keys()):
+                        with st.expander(f"  {ticker} ({len(ticker_groups[ticker])} columns)", expanded=False):
+                            for col in sorted(ticker_groups[ticker]):
+                                is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                                if is_checked:
+                                    selected.append(col)
+
+            # Fundamental columns
+            if fundamental_cols:
+                with st.expander(f"🏢 Company Fundamentals ({len(fundamental_cols)})", expanded=False):
+                    # Group by metric type
+                    metric_groups = {}
+                    for col in fundamental_cols:
+                        parts = col.split('_')
+                        if len(parts) >= 2:
+                            metric = parts[0]  # First part is metric
+                            if metric not in metric_groups:
+                                metric_groups[metric] = []
+                            metric_groups[metric].append(col)
+
+                    for metric in sorted(metric_groups.keys()):
+                        with st.expander(f"  {metric} ({len(metric_groups[metric])} columns)", expanded=False):
+                            for col in sorted(metric_groups[metric]):
+                                is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                                if is_checked:
+                                    selected.append(col)
+
+            # News columns
+            if news_cols:
+                with st.expander(f"📰 News & Earnings Calls ({len(news_cols)})", expanded=False):
+                    for col in sorted(news_cols):
+                        is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                        if is_checked:
+                            selected.append(col)
+
+            # Other columns
+            if other_cols:
+                with st.expander(f"🔹 Other Columns ({len(other_cols)})", expanded=False):
+                    for col in sorted(other_cols):
+                        is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                        if is_checked:
+                            selected.append(col)
+
+            # Update session state only if selection changed
+            if set(selected) != set(st.session_state.selected_transduction_columns):
+                st.session_state.selected_transduction_columns = selected
+
+            # Show summary
+            total_selected = len(selected)
+            st.caption(f"📊 **{total_selected} columns selected** (Date always included)")
+
+            # Quick actions
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Select All", use_container_width=True):
+                    st.session_state.selected_transduction_columns = other_columns
+                    st.rerun()
+            with col2:
+                if st.button("❌ Clear All", use_container_width=True):
+                    st.session_state.selected_transduction_columns = []
+                    st.rerun()
+        else:
+            st.warning("Could not load column names from merged_data.csv")
 
     st.markdown("---")
 
@@ -1495,9 +1800,20 @@ with st.sidebar:
         - Create a timeline of significant market events from 2020-2022
         """)
 
+# Page selector in sidebar
+with st.sidebar:
+    st.markdown("### 📑 Navigation")
+    page = st.radio(
+        "Select Page",
+        ["Chat", "Transduction Flow"],
+        index=0 if st.session_state.current_page == "Chat" else 1,
+        key="page_selector"
+    )
+    st.session_state.current_page = page
+    st.markdown("---")
+
 # Agent Logs Sidebar (Left) - Always visible
 with st.sidebar:
-    st.markdown("---")
     st.markdown("#### 🔍 Agent Thought Process")
     st.caption("View the agent's reasoning and tool calls in real-time")
 
@@ -1509,89 +1825,99 @@ with st.sidebar:
     else:
         st.info("💡 Agent logs will appear here once you ask a question. You'll be able to see the agent's tool usage, reasoning process, and decision-making in real-time!")
 
-# Main content
-st.markdown('<div class="main-header">Financial Data Analyst</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Ask questions about macroeconomic data, market factors, and company fundamentals from 2008 to present</div>', unsafe_allow_html=True)
+# Main content - Show different pages based on selection
+if st.session_state.current_page == "Transduction Flow":
+    display_transduction_flow()
+else:
+    # Chat page
+    st.markdown('<div class="main-header">Financial Data Analyst</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Ask questions about macroeconomic data, market factors, and company fundamentals from 2008 to present</div>', unsafe_allow_html=True)
 
-# Display chat history
-for message in st.session_state.messages:
-    role = message["role"]
-    content = message["content"]
+    # Display chat history
+    for message in st.session_state.messages:
+        role = message["role"]
+        content = message["content"]
 
-    if role == "user":
-        st.markdown(f'<div class="chat-message user-message"><strong>You:</strong><br>{content}</div>',
-                   unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="chat-message assistant-message"><strong>🤖 Analyst:</strong><br>{content}</div>',
-                   unsafe_allow_html=True)
+        if role == "user":
+            st.markdown(f'<div class="chat-message user-message"><strong>You:</strong><br>{content}</div>',
+                       unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="chat-message assistant-message"><strong>🤖 Analyst:</strong><br>{content}</div>',
+                       unsafe_allow_html=True)
 
-        # Display visualizations for this message
-        if "visualizations" in message:
-            for viz_id in message["visualizations"]:
-                load_visualization(viz_id)
+            # Display visualizations for this message
+            if "visualizations" in message:
+                for viz_id in message["visualizations"]:
+                    load_visualization(viz_id)
 
-# User input
-with st.container():
-    # If clear_input flag is set, reset the text area
-    if st.session_state.clear_input:
-        st.session_state.user_input = ""
-        st.session_state.clear_input = False
+    # User input
+    with st.container():
+        # If clear_input flag is set, reset the text area
+        if st.session_state.clear_input:
+            st.session_state.user_input = ""
+            st.session_state.clear_input = False
 
-    user_input = st.text_area(
-        "Ask your question:",
-        placeholder="E.g., What was the S&P 500 volatility during the 2008 crisis?",
-        height=100,
-        key="user_input"
-    )
+        user_input = st.text_area(
+            "Ask your question:",
+            placeholder="E.g., What was the S&P 500 volatility during the 2008 crisis?",
+            height=100,
+            key="user_input"
+        )
 
-    col1, col2 = st.columns([8, 1])
-    with col2:
-        submit_button = st.button("Analyze", type="primary")
+        col1, col2 = st.columns([8, 1])
+        with col2:
+            submit_button = st.button("Analyze", type="primary")
 
-# Process user input
-if submit_button and user_input:
-    # Add user message
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input
-    })
+    # Process user input
+    if submit_button and user_input:
+        # Add user message
+        st.session_state.messages.append({
+            "role": "user",
+            "content": user_input
+        })
 
-    # Clean old visualizations from previous turn
-    clean_old_visualizations()
-    st.session_state.current_visualizations = []
+        # Clean old visualizations from previous turn
+        clean_old_visualizations()
+        st.session_state.current_visualizations = []
 
-    # Show loading state
-    with st.spinner("Thinking..."):
-        try:
-            # Run analysis with conversation history for context and capture logs
-            response = run_analysis_with_logs(
-                user_input,
-                st.session_state.messages,
-                enabled_tool_categories=st.session_state.enabled_tool_categories
-            )
+        # Show loading state
+        with st.spinner("Thinking..."):
+            try:
+                # Run analysis with conversation history for context and capture logs
+                # Pass selected columns for transduction filtering
+                selected_cols = st.session_state.get("selected_transduction_columns", [])
+                response = run_analysis_with_logs(
+                    user_input,
+                    st.session_state.messages,
+                    selected_columns=selected_cols if selected_cols else None
+                )
 
-            # Extract visualization IDs from response
-            viz_ids = extract_visualization_ids(response)
-            st.session_state.current_visualizations = viz_ids
+                # Extract visualization IDs from response
+                viz_ids = extract_visualization_ids(response)
+                st.session_state.current_visualizations = viz_ids
 
-            # Add assistant message
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": response,
-                "visualizations": viz_ids
-            })
+                # Add assistant message
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": response,
+                    "visualizations": viz_ids
+                })
 
-        except Exception as e:
-            st.error(f"Error during analysis: {str(e)}")
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"I encountered an error: {str(e)}. Please try rephrasing your question.",
-                "visualizations": []
-            })
+                # Clear previous transduction flow when new analysis starts
+                # The new flow will be set by the transduction tool
+                # This ensures we only show the latest flow
 
-    # Set flag to clear input on next run
-    st.session_state.clear_input = True
+            except Exception as e:
+                st.error(f"Error during analysis: {str(e)}")
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": f"I encountered an error: {str(e)}. Please try rephrasing your question.",
+                    "visualizations": []
+                })
 
-    # Rerun to display new messages
-    st.rerun()
+        # Set flag to clear input on next run
+        st.session_state.clear_input = True
+
+        # Rerun to display new messages
+        st.rerun()
 

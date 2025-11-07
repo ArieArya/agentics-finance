@@ -3,14 +3,15 @@ Tools using agentics framework
 """
 
 from crewai.tools import BaseTool
-from typing import Type, Optional
+from typing import Type, Optional, List
 from pydantic import BaseModel, Field
 from agentics import AG
 import pandas as pd
 import json
 import asyncio
 import os
-from datetime import datetime
+import csv
+import sys
 
 
 class TransductionAnswer(BaseModel):
@@ -28,12 +29,12 @@ class TransductionAnswer(BaseModel):
 class TransductionInput(BaseModel):
     """Input schema for TransductionTool."""
     question: str = Field(..., description="The question to answer")
-    dataset: str = Field(
-        ...,
-        description="Dataset to analyze. Must be one of: 'macro' (macroeconomic indicators), 'market' (market data & indices), 'dj30' (DJ30 stock prices)"
-    )
     start_date: str = Field(..., description="The start date of the data to use for the answer (YYYY-MM-DD)")
     end_date: str = Field(..., description="The end date of the data to use for the answer (YYYY-MM-DD)")
+    selected_columns: Optional[List[str]] = Field(
+        default=None,
+        description="List of column names to include in the analysis. If None, all columns are included. Date column is always included."
+    )
 
 
 class UnifiedTransductionTool(BaseTool):
@@ -43,57 +44,73 @@ class UnifiedTransductionTool(BaseTool):
         "This tool performs deep analysis by reducing large datasets into meaningful insights. "
         "Use this tool when you need comprehensive analysis across a date range that requires "
         "synthesizing information from multiple data points that standard tools cannot handle. "
-        "\n\nSupported datasets:\n"
-        "- 'macro': Macroeconomic indicators (FEDFUNDS, CPI, UNRATE, etc.)\n"
-        "- 'market': Market data & indices (S&P 500, VIX, BTC, Gold, etc.)\n"
-        "- 'dj30': DJ30 stock prices (OHLCV data for 30 Dow Jones companies)\n"
-        "\n\nInput format: question (str), dataset (str), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)\n"
+        "The tool analyzes a comprehensive merged dataset containing macroeconomic indicators, "
+        "market factors, DJ30 stock prices, company fundamentals, and news data. "
+        "\n\nInput format: question (str), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)\n"
         "Note: For large date ranges (>100 rows), the tool automatically applies uniform temporal sampling "
         "to analyze ~100 representative data points while preserving time-series patterns."
     )
     args_schema: Type[BaseModel] = TransductionInput
 
-    def _run(self, question: str, dataset: str, start_date: str, end_date: str) -> str:
+    def _run(self, question: str, start_date: str, end_date: str, selected_columns: Optional[List[str]] = None) -> str:
         try:
             print(f"\n{'='*80}")
             print(f"🔍 Starting Transduction Analysis")
             print(f"{'='*80}")
             print(f"Question: '{question}'")
-            print(f"Dataset: {dataset}")
             print(f"Date range: {start_date} to {end_date}")
 
-            # Map dataset names to CSV files and their date columns
-            dataset_mapping = {
-                "macro": {"file": "macro_factors_new.csv"},
-                "market": {"file": "market_factors_new.csv"},
-                "dj30": {"file": "dj30_data_full.csv"},
-            }
-
-            # Validate dataset parameter
-            if dataset not in dataset_mapping:
-                print(f"❌ ERROR: Invalid dataset: {dataset}")
-                return json.dumps({
-                    "success": False,
-                    "error": f"Invalid dataset '{dataset}'. Must be one of: {list(dataset_mapping.keys())}"
-                }, indent=2)
-
-            # Get the absolute path to the CSV file and date column name
-            csv_filename = dataset_mapping[dataset]["file"]
+            # Use the merged dataset (supports both single file and split files)
             date_column = "Date"
-            csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", csv_filename)
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
-            if not os.path.exists(csv_path):
-                print(f"❌ ERROR: Dataset file not found: {csv_path}")
+            # Import the CSV reader utility
+            from utils.csv_reader import get_merged_data_file_for_agentics
+
+            try:
+                csv_path = get_merged_data_file_for_agentics(data_dir)
+            except FileNotFoundError as e:
+                print(f"❌ ERROR: {e}")
                 return json.dumps({
                     "success": False,
-                    "error": f"Dataset file not found: {csv_filename}"
+                    "error": str(e)
                 }, indent=2)
 
-            # Load the full dataset using Agentics
-            print(f"\n📂 Loading {dataset} dataset from {csv_filename}")
+            # Increase CSV field size limit to handle large text fields (e.g., Headlines, Earningcall)
+            # Default limit is 131072 bytes (128KB), increase to handle large text content
+            # Set to a large value (10MB) to accommodate very long text fields
+            try:
+                csv.field_size_limit(10 * 1024 * 1024)  # 10MB
+            except OverflowError:
+                # If 10MB is too large for the system, use maximum allowed
+                csv.field_size_limit(sys.maxsize)
+
+            # Load the full dataset first
+            print(f"\n📂 Loading merged dataset")
             print(f"📅 Date column: {date_column}")
             agentics = AG.from_csv(csv_path)
-            print(f"✅ Loaded {len(agentics.states):,} total rows from {dataset} dataset")
+            print(f"✅ Loaded {len(agentics.states):,} total rows with {len(agentics.atype.model_fields)} columns")
+
+            # Filter to selected columns if provided (using Agentics __call__ method)
+            if selected_columns is not None and len(selected_columns) > 0:
+                # Always include Date column for filtering, and ensure it comes first
+                # Remove Date from selected_columns if present to avoid duplicates
+                selected_without_date = [col for col in selected_columns if col != "Date"]
+                # Put Date first, then the rest of the selected columns
+                columns_to_include = ["Date"] + selected_without_date
+                print(f"\n🔧 Filtering to {len(columns_to_include)} selected columns: {', '.join(columns_to_include[:5])}...")
+
+                # Use Agentics __call__ method to filter to only selected columns
+                # This creates a new AG with only the specified fields
+                # The order of arguments determines the order of fields in the model
+                agentics = agentics(*columns_to_include)
+                print(f"✅ Filtered dataset to {len(columns_to_include)} columns (Date first)")
+            else:
+                print(f"❌ You must select at least one column to analyze")
+                return json.dumps({
+                    "success": False,
+                    "error": "You must select at least one column to analyze"
+                })
 
             # Find the indices that correspond to start_date and end_date
             # Agentics creates states where each state has attributes corresponding to CSV columns
@@ -171,18 +188,59 @@ class UnifiedTransductionTool(BaseTool):
 
             # Perform reduction on the filtered (and possibly sampled) dataset
             print(f"\n⚡ Starting batch reduction with {num_batches} batches...")
-            reduced = asyncio.run(
-                AG(
-                    atype=pydantic_class,
-                    transduction_type="areduce",
-                    areduce_batch_size=batch_size,
-                )
-                << filtered_agentics
+
+            # Create AG with areduce_batch_size
+            reducer_ag = AG(
+                atype=pydantic_class,
+                transduction_type="areduce",
+                areduce_batch_size=batch_size,
             )
-            print(f"✅ Batch reduction complete. Generated {len(reduced.states):,} intermediate results")
+
+            reduced = asyncio.run(reducer_ag << filtered_agentics)
+
+            # Store transduction flow data for visualization
+            # This will be accessed by the Streamlit app to display the flow
+            try:
+                import streamlit as st
+                # Store flow data in session state
+                flow_data = {
+                    "initial_states": {
+                        "agentics": filtered_agentics,
+                        "atype_name": filtered_agentics.atype.__name__ if filtered_agentics.atype else "Unknown",
+                        "num_rows": len(filtered_agentics.states)
+                    },
+                    "intermediate_batches": {
+                        "batches": getattr(reduced, 'areduce_batches', []),
+                        "atype_name": pydantic_class.__name__ if pydantic_class else "Unknown",
+                        "num_batches": len(getattr(reduced, 'areduce_batches', []))
+                    },
+                    "final_intermediate": {
+                        "agentics": reduced,
+                        "atype_name": reduced.atype.__name__ if reduced.atype else "Unknown",
+                        "num_rows": len(reduced.states)
+                    }
+                }
+                st.session_state.transduction_flow = flow_data
+            except Exception as e:
+                # If streamlit is not available (e.g., during testing), just continue
+                pass
+
+            # Add question attribute to the reduced result
             reduced = reduced.add_attribute("question", default_value=question)
 
-            print(f"\n 🔽 INTERMEDIATE RESULTS:")
+            # Display intermediate batch results if available
+            # Note: areduce_batches contains the intermediate results from each batch
+            # These are the results after reducing each batch of batch_size rows
+            if hasattr(reduced, 'areduce_batches') and reduced.areduce_batches:
+                print(f"\n 🔽 INTERMEDIATE BATCH RESULTS ({len(reduced.areduce_batches)} batches):")
+                for i, batch_result in enumerate(reduced.areduce_batches, 1):
+                    print(f"\n--- Batch {i + 1} ---")
+                    if hasattr(batch_result, 'model_dump_json'):
+                        print(batch_result.model_dump_json(indent=2))
+                    else:
+                        print(str(batch_result))
+
+            print(f"\n 🔽 FINAL REDUCED RESULT:")
             reduced.pretty_print()
 
             # Generate final answer
@@ -191,6 +249,18 @@ class UnifiedTransductionTool(BaseTool):
                 AG(atype=TransductionAnswer, transduction_type="areduce") << reduced
             )
             print(f"✅ Final answer generation complete")
+
+            # Store final answer in flow data
+            try:
+                import streamlit as st
+                if st.session_state.transduction_flow:
+                    st.session_state.transduction_flow["final_answer"] = {
+                        "agentics": answer,
+                        "atype_name": answer.atype.__name__ if answer.atype else "Unknown",
+                        "num_rows": len(answer.states)
+                    }
+            except Exception:
+                pass
 
             # Extract the answer from the AG object
             final_answer = answer[0] if len(answer) > 0 else None
@@ -204,7 +274,6 @@ class UnifiedTransductionTool(BaseTool):
 
                 result = {
                     "success": True,
-                    "dataset": dataset,
                     "date_range": {
                         "start": start_date,
                         "end": end_date,

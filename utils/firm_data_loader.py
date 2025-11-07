@@ -1,26 +1,43 @@
 """
-Utility for loading and caching firm-level fundamental data.
+Utility for loading and caching firm-level fundamental data from merged dataset.
 """
 
 import pandas as pd
 import os
 from functools import lru_cache
-
+import re
+from .csv_reader import read_merged_data_csv
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-FIRM_DATA_FILE = os.path.join(DATA_DIR, "firm_summary.csv")
+
+# Fundamental metric prefixes (without ticker suffix)
+FUNDAMENTAL_METRICS = [
+    'BPS', 'CPS', 'CPX', 'CSH', 'DPS', 'EBS', 'EPS', 'GRM',
+    'NAV', 'NDT', 'NET', 'ROA', 'ROE', 'SAL'
+]
+
+# Suffixes that indicate data type
+DATA_SUFFIXES = ['_MEDEST', '_MEANEST', '_ACTUAL']
+
+
+@lru_cache(maxsize=1)
+def _load_merged_data() -> pd.DataFrame:
+    """Load the merged dataset (cached)."""
+    df = read_merged_data_csv(DATA_DIR)
+    df['Date'] = pd.to_datetime(df['Date'])
+    return df
 
 
 @lru_cache(maxsize=1)
 def load_firm_data() -> pd.DataFrame:
     """
-    Load firm fundamental data from CSV.
+    Load firm fundamental data from merged dataset, converting from wide to long format.
 
     Returns:
         DataFrame with columns:
         - TICKER: Company ticker symbol
         - STATPERS: Statement period (date)
-        - PRICE: Stock price
+        - PRICE: Stock price (from close_* columns)
         - EBS: Earnings Before Shares (Operating Income)
         - EPS: Earnings Per Share
         - DPS: Dividends Per Share
@@ -28,18 +45,92 @@ def load_firm_data() -> pd.DataFrame:
         - ROE: Return on Equity (%)
         - NAV: Net Asset Value
         - GRM: Gross Margin (%)
-        - FVYRGRO_*: Forward 1-year growth estimates
-        - FVYSTA_*: Forward 1-year volatility estimates
+        - BPS: Book Value Per Share
+        - CPS: Cash Per Share
+        - SAL: Sales
+        - NET: Net Income
     """
-    df = pd.read_csv(FIRM_DATA_FILE)
+    df = _load_merged_data()
 
-    # Convert STATPERS to datetime and set as index
-    df['STATPERS'] = pd.to_datetime(df['STATPERS'])
+    # Extract all tickers from fundamental columns
+    all_tickers = set()
+    for col in df.columns:
+        for metric in FUNDAMENTAL_METRICS:
+            for suffix in DATA_SUFFIXES:
+                pattern = f"^{metric}_([A-Z]+){suffix}$"
+                match = re.match(pattern, col)
+                if match:
+                    all_tickers.add(match.group(1))
+
+    if not all_tickers:
+        return pd.DataFrame(columns=['TICKER', 'STATPERS'])
+
+    # Collect all rows for long format
+    long_data = []
+
+    for ticker in sorted(all_tickers):
+        # Extract fundamental columns for this ticker
+        ticker_metrics = {}
+
+        # Map metric names (use MEDEST as primary, fallback to ACTUAL)
+        metric_mapping = {
+            'EPS': 'EPS',
+            'DPS': 'DPS',
+            'ROA': 'ROA',
+            'ROE': 'ROE',
+            'NAV': 'NAV',
+            'GRM': 'GRM',
+            'EBS': 'EBS',
+            'BPS': 'BPS',
+            'CPS': 'CPS',
+            'SAL': 'SAL',
+            'NET': 'NET'
+        }
+
+        for metric, col_name in metric_mapping.items():
+            # Try MEDEST first, then ACTUAL
+            for suffix in ['_MEDEST', '_ACTUAL']:
+                col = f"{metric}_{ticker}{suffix}"
+                if col in df.columns:
+                    ticker_metrics[col_name] = col
+                    break
+
+        # Also get price from close column
+        price_col = f"close_{ticker}"
+        if price_col in df.columns:
+            ticker_metrics['PRICE'] = price_col
+
+        if not ticker_metrics:
+            continue
+
+        # Create dataframe for this ticker
+        ticker_df = df[['Date'] + list(ticker_metrics.values())].copy()
+
+        # Rename columns
+        rename_dict = {v: k for k, v in ticker_metrics.items()}
+        ticker_df = ticker_df.rename(columns=rename_dict)
+        ticker_df = ticker_df.rename(columns={'Date': 'STATPERS'})
+
+        # Add ticker column
+        ticker_df['TICKER'] = ticker
+
+        # Drop rows where all fundamental columns are NaN
+        fundamental_cols = [k for k in ticker_metrics.keys() if k != 'PRICE']
+        ticker_df = ticker_df.dropna(subset=fundamental_cols, how='all')
+
+        if not ticker_df.empty:
+            long_data.append(ticker_df)
+
+    if not long_data:
+        return pd.DataFrame(columns=['TICKER', 'STATPERS'])
+
+    # Combine all tickers
+    result_df = pd.concat(long_data, ignore_index=True)
 
     # Sort by ticker and date
-    df = df.sort_values(['TICKER', 'STATPERS'])
+    result_df = result_df.sort_values(['TICKER', 'STATPERS']).reset_index(drop=True)
 
-    return df
+    return result_df
 
 
 @lru_cache(maxsize=128)
@@ -54,7 +145,7 @@ def get_company_data(ticker: str) -> pd.DataFrame:
         DataFrame with all periods for that company
     """
     df = load_firm_data()
-    company_df = df[df['TICKER'] == ticker].copy()
+    company_df = df[df['TICKER'] == ticker.upper()].copy()
 
     if company_df.empty:
         return pd.DataFrame()
@@ -73,6 +164,8 @@ def get_available_tickers() -> list:
         List of ticker symbols
     """
     df = load_firm_data()
+    if df.empty:
+        return []
     return sorted(df['TICKER'].unique().tolist())
 
 
@@ -105,7 +198,7 @@ def get_latest_data(ticker: str, date: str = None) -> dict:
 
     # Convert to dictionary, handling NaN values
     result = latest.to_dict()
-    result['TICKER'] = ticker
+    result['TICKER'] = ticker.upper()
     result['STATPERS'] = str(latest.name.date())
 
     # Clean up NaN values
@@ -182,7 +275,7 @@ def calculate_valuation_metrics(ticker: str, date: str = None) -> dict:
 
     price = data['PRICE']
     metrics = {
-        'ticker': ticker,
+        'ticker': ticker.upper(),
         'price': price,
         'date': data['STATPERS']
     }
@@ -194,24 +287,15 @@ def calculate_valuation_metrics(ticker: str, date: str = None) -> dict:
     # P/B Ratio (Price to Net Asset Value)
     if data.get('NAV') and data['NAV'] > 0:
         metrics['pb_ratio'] = price / data['NAV']
+    elif data.get('BPS') and data['BPS'] > 0:
+        metrics['pb_ratio'] = price / data['BPS']
 
     # Dividend Yield
     if data.get('DPS') and data['DPS'] > 0:
         metrics['dividend_yield'] = (data['DPS'] / price) * 100
 
-    # Forward P/E (if forward EPS available)
-    if data.get('EPS') and data.get('FVYRGRO_EPS'):
-        forward_eps = data['EPS'] * (1 + data['FVYRGRO_EPS'] / 100)
-        if forward_eps > 0:
-            metrics['forward_pe'] = price / forward_eps
-
     # Copy fundamental metrics
-    for key in ['EPS', 'DPS', 'ROA', 'ROE', 'GRM', 'EBS', 'NAV']:
-        if data.get(key) is not None:
-            metrics[key.lower()] = data[key]
-
-    # Copy growth metrics
-    for key in ['FVYRGRO_EPS', 'FVYRGRO_ROE', 'FVYRGRO_ROA']:
+    for key in ['EPS', 'DPS', 'ROA', 'ROE', 'GRM', 'EBS', 'NAV', 'BPS', 'CPS', 'SAL', 'NET']:
         if data.get(key) is not None:
             metrics[key.lower()] = data[key]
 
@@ -226,6 +310,15 @@ def get_firm_data_summary() -> dict:
         Dictionary with dataset statistics
     """
     df = load_firm_data()
+
+    if df.empty:
+        return {
+            "total_records": 0,
+            "unique_tickers": 0,
+            "date_range": {"start": None, "end": None},
+            "tickers": [],
+            "columns": []
+        }
 
     return {
         "total_records": len(df),
@@ -257,21 +350,8 @@ def get_column_descriptions() -> dict:
         "ROE": "Return on Equity (%)",
         "NAV": "Net Asset Value per share",
         "GRM": "Gross Margin (%)",
-        "FVYRGRO_EBS": "1-year forward EBS growth estimate (%)",
-        "FVYRGRO_EPS": "1-year forward EPS growth estimate (%)",
-        "FVYRGRO_DPS": "1-year forward DPS growth estimate (%)",
-        "FVYRGRO_ROA": "1-year forward ROA growth estimate (%)",
-        "FVYRGRO_ROE": "1-year forward ROE growth estimate (%)",
-        "FVYRGRO_NAV": "1-year forward NAV growth estimate (%)",
-        "FVYRGRO_GRM": "1-year forward GRM growth estimate (%)",
-        "FVYSTA_EBS": "1-year forward EBS volatility estimate",
-        "FVYSTA_EPS": "1-year forward EPS volatility estimate",
-        "FVYSTA_DPS": "1-year forward DPS volatility estimate",
-        "FVYSTA_ROA": "1-year forward ROA volatility estimate",
-        "FVYSTA_ROE": "1-year forward ROE volatility estimate",
-        "FVYSTA_NAV": "1-year forward NAV volatility estimate",
-        "FVYSTA_GRM": "1-year forward GRM volatility estimate"
+        "BPS": "Book Value Per Share",
+        "CPS": "Cash Per Share",
+        "SAL": "Sales",
+        "NET": "Net Income"
     }
-
-
-

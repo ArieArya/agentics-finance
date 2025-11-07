@@ -1,45 +1,69 @@
 """
 Data loading utilities for financial datasets.
-Handles loading and caching of macro and market factor data.
+Handles loading and caching of macro and market factor data from merged dataset.
 """
 
 import pandas as pd
 import os
 from typing import Tuple
 from functools import lru_cache
+from .csv_reader import read_merged_data_csv
 
 # Get the data directory path
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-MACRO_FILE = os.path.join(DATA_DIR, "macro_factors_new.csv")
-MARKET_FILE = os.path.join(DATA_DIR, "market_factors_new.csv")
+
+# Define column groups
+MACRO_COLUMNS = [
+    "FEDFUNDS", "TB3MS", "T10Y3M", "CPIAUCSL", "CPILFESL",
+    "PCEPI", "PCEPILFE", "UNRATE", "PAYEMS", "INDPRO", "RSAFS"
+]
+
+MARKET_COLUMNS = [
+    "^GSPC", "^STOXX50E", "BTC-USD", "^VIX", "GSG",
+    "DGS2", "DGS10", "DTWEXBGS", "DCOILBRENTEU", "GLD", "US10Y2Y", "Headlines"
+]
+
+
+@lru_cache(maxsize=1)
+def _load_merged_data() -> pd.DataFrame:
+    """
+    Load the merged dataset (cached).
+
+    Returns:
+        pd.DataFrame: Merged dataset with Date as index
+    """
+    df = read_merged_data_csv(DATA_DIR)
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
+    return df
 
 
 @lru_cache(maxsize=1)
 def load_macro_factors() -> pd.DataFrame:
     """
-    Load macro economic factors data.
+    Load macro economic factors data from merged dataset.
 
     Returns:
         pd.DataFrame: Macro factors with Date as index
     """
-    df = pd.read_csv(MACRO_FILE)
-    df['Date'] = pd.to_datetime(df['Date'])
-    df.set_index('Date', inplace=True)
-    return df
+    df = _load_merged_data()
+    # Extract only macro columns that exist in the dataframe
+    available_macro_cols = [col for col in MACRO_COLUMNS if col in df.columns]
+    return df[available_macro_cols]
 
 
 @lru_cache(maxsize=1)
 def load_market_factors() -> pd.DataFrame:
     """
-    Load market factors data.
+    Load market factors data from merged dataset.
 
     Returns:
         pd.DataFrame: Market factors with Date as index
     """
-    df = pd.read_csv(MARKET_FILE)
-    df['Date'] = pd.to_datetime(df['Date'])
-    df.set_index('Date', inplace=True)
-    return df
+    df = _load_merged_data()
+    # Extract only market columns that exist in the dataframe
+    available_market_cols = [col for col in MARKET_COLUMNS if col in df.columns]
+    return df[available_market_cols]
 
 
 def load_all_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -118,4 +142,3 @@ def get_column_descriptions() -> dict:
             "Headlines": "News headlines for the date"
         }
     }
-

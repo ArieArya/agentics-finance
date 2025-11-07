@@ -1,212 +1,115 @@
 """
-Tools for querying financial data.
+Tools for querying available data and indicators.
 """
 
 from crewai.tools import BaseTool
-from typing import Type, Optional
+from typing import Type
 from pydantic import BaseModel, Field
 import pandas as pd
 import json
+import os
 from utils.data_loader import load_macro_factors, load_market_factors, get_column_descriptions
-
-
-class DateRangeQueryInput(BaseModel):
-    """Input schema for DateRangeQueryTool."""
-    start_date: str = Field(..., description="Start date in YYYY-MM-DD format")
-    end_date: str = Field(..., description="End date in YYYY-MM-DD format")
-    indicators: str = Field(..., description="Comma-separated list of indicator names (e.g., 'FEDFUNDS,^GSPC,^VIX')")
-    dataset: str = Field(default="both", description="Dataset to query: 'macro', 'market', or 'both'")
-
-
-class DateRangeQueryTool(BaseTool):
-    name: str = "Query Data by Date Range"
-    description: str = (
-        "Retrieves SUMMARY of financial data for specific indicators within a date range. "
-        "Returns statistics and sample data points (NOT full dataset). "
-        "Use this ONLY when you need specific data values to report to the user. "
-        "Do NOT use this before creating visualizations - visualization tools load data themselves. "
-        "Supports both macro factors (FEDFUNDS, CPIAUCSL, UNRATE, etc.) "
-        "and market factors (^GSPC, ^VIX, BTC-USD, etc.)."
-    )
-    args_schema: Type[BaseModel] = DateRangeQueryInput
-
-    def _run(self, start_date: str, end_date: str, indicators: str, dataset: str = "both") -> str:
-        try:
-            # Parse indicators
-            indicator_list = [ind.strip() for ind in indicators.split(',')]
-
-            # Load appropriate dataset(s)
-            result_summary = {}
-
-            if dataset in ["macro", "both"]:
-                macro_df = load_macro_factors()
-                macro_indicators = [ind for ind in indicator_list if ind in macro_df.columns]
-                if macro_indicators:
-                    filtered = macro_df.loc[start_date:end_date, macro_indicators]
-
-                    # Create summary instead of full data
-                    summary = {
-                        "data_points": len(filtered),
-                        "indicators": {}
-                    }
-
-                    for ind in macro_indicators:
-                        series = filtered[ind].dropna()
-                        summary["indicators"][ind] = {
-                            "start_value": float(series.iloc[0]) if len(series) > 0 else None,
-                            "end_value": float(series.iloc[-1]) if len(series) > 0 else None,
-                            "min": float(series.min()),
-                            "max": float(series.max()),
-                            "mean": float(series.mean()),
-                            "change": float(series.iloc[-1] - series.iloc[0]) if len(series) > 0 else None,
-                            "pct_change": float(((series.iloc[-1] - series.iloc[0]) / series.iloc[0]) * 100) if len(series) > 0 and series.iloc[0] != 0 else None
-                        }
-
-                    result_summary['macro'] = summary
-
-            if dataset in ["market", "both"]:
-                market_df = load_market_factors()
-                market_indicators = [ind for ind in indicator_list if ind in market_df.columns]
-                if market_indicators:
-                    filtered = market_df.loc[start_date:end_date, market_indicators]
-
-                    # Create summary instead of full data
-                    summary = {
-                        "data_points": len(filtered),
-                        "indicators": {}
-                    }
-
-                    for ind in market_indicators:
-                        series = filtered[ind].dropna()
-                        summary["indicators"][ind] = {
-                            "start_value": float(series.iloc[0]) if len(series) > 0 else None,
-                            "end_value": float(series.iloc[-1]) if len(series) > 0 else None,
-                            "min": float(series.min()),
-                            "max": float(series.max()),
-                            "mean": float(series.mean()),
-                            "change": float(series.iloc[-1] - series.iloc[0]) if len(series) > 0 else None,
-                            "pct_change": float(((series.iloc[-1] - series.iloc[0]) / series.iloc[0]) * 100) if len(series) > 0 and series.iloc[0] != 0 else None
-                        }
-
-                    result_summary['market'] = summary
-
-            return json.dumps({
-                "success": True,
-                "date_range": {"start": start_date, "end": end_date},
-                "indicators": indicator_list,
-                "summary": result_summary,
-                "note": "This is a summary. For visualizations, use visualization tools directly."
-            }, indent=2)
-
-        except Exception as e:
-            return json.dumps({
-                "success": False,
-                "error": str(e)
-            })
-
-
-class IndicatorStatsInput(BaseModel):
-    """Input schema for IndicatorStatsTool."""
-    indicator: str = Field(..., description="Indicator name (e.g., 'FEDFUNDS', '^GSPC', '^VIX')")
-    start_date: Optional[str] = Field(None, description="Optional start date in YYYY-MM-DD format")
-    end_date: Optional[str] = Field(None, description="Optional end date in YYYY-MM-DD format")
-
-
-class IndicatorStatsTool(BaseTool):
-    name: str = "Get Indicator Statistics"
-    description: str = (
-        "Calculates statistical summary for a specific indicator including mean, median, "
-        "std deviation, min, max, and percentiles. Optionally filter by date range."
-    )
-    args_schema: Type[BaseModel] = IndicatorStatsInput
-
-    def _run(self, indicator: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> str:
-        try:
-            # Try to find indicator in macro or market dataset
-            macro_df = load_macro_factors()
-            market_df = load_market_factors()
-
-            if indicator in macro_df.columns:
-                df = macro_df
-                dataset = "macro_factors"
-            elif indicator in market_df.columns:
-                df = market_df
-                dataset = "market_factors"
-            else:
-                return json.dumps({
-                    "success": False,
-                    "error": f"Indicator '{indicator}' not found in any dataset"
-                })
-
-            # Filter by date range if provided
-            if start_date and end_date:
-                series = df.loc[start_date:end_date, indicator]
-            elif start_date:
-                series = df.loc[start_date:, indicator]
-            elif end_date:
-                series = df.loc[:end_date, indicator]
-            else:
-                series = df[indicator]
-
-            # Drop NaN values
-            series = series.dropna()
-
-            # Calculate statistics
-            stats = {
-                "indicator": indicator,
-                "dataset": dataset,
-                "count": int(series.count()),
-                "mean": float(series.mean()),
-                "median": float(series.median()),
-                "std": float(series.std()),
-                "min": float(series.min()),
-                "max": float(series.max()),
-                "q25": float(series.quantile(0.25)),
-                "q75": float(series.quantile(0.75))
-            }
-
-            if start_date or end_date:
-                stats["date_range"] = {
-                    "start": start_date or "beginning",
-                    "end": end_date or "end"
-                }
-
-            return json.dumps({
-                "success": True,
-                "statistics": stats
-            }, indent=2)
-
-        except Exception as e:
-            return json.dumps({
-                "success": False,
-                "error": str(e)
-            })
+from utils.dj30_data_loader import get_available_tickers as get_dj30_tickers
+from utils.firm_data_loader import get_available_tickers as get_firm_tickers
 
 
 class AvailableIndicatorsInput(BaseModel):
     """Input schema for AvailableIndicatorsTool."""
-    pass
+    category: str = Field(
+        default="all",
+        description="Category to filter by: 'all', 'macro', 'market', 'dj30', 'fundamentals', or 'stocks'"
+    )
 
 
 class AvailableIndicatorsTool(BaseTool):
     name: str = "List Available Indicators"
     description: str = (
-        "Lists all available indicators in the dataset with their descriptions. "
-        "Use this tool to discover what data is available for analysis."
+        "Lists all available indicators, columns, and data fields in the merged dataset. "
+        "Use this tool to discover what indicators are available before using visualization tools. "
+        "Returns indicators organized by category: macroeconomic indicators, market factors, "
+        "DJ30 stock prices, and company fundamentals. "
+        "This is essential when you need to know valid indicator names for tools like "
+        "ComparativePerformanceTool, TimeSeriesPlotTool, or MultiIndicatorPlotTool."
     )
     args_schema: Type[BaseModel] = AvailableIndicatorsInput
 
-    def _run(self) -> str:
+    def _run(self, category: str = "all") -> str:
         try:
-            descriptions = get_column_descriptions()
-            return json.dumps({
+            result = {
                 "success": True,
-                "indicators": descriptions
-            }, indent=2)
+                "category": category,
+                "indicators": {}
+            }
+
+            # Load data to get actual column names
+            macro_df = load_macro_factors()
+            market_df = load_market_factors()
+
+            # Get column descriptions
+            descriptions = get_column_descriptions()
+
+            # Macroeconomic indicators
+            if category in ["all", "macro"]:
+                macro_indicators = {
+                    "indicators": sorted(macro_df.columns.tolist()),
+                    "count": len(macro_df.columns),
+                    "descriptions": descriptions.get("macro_factors", {})
+                }
+                result["indicators"]["macroeconomic"] = macro_indicators
+
+            # Market factors
+            if category in ["all", "market"]:
+                market_indicators = {
+                    "indicators": sorted(market_df.columns.tolist()),
+                    "count": len(market_df.columns),
+                    "descriptions": descriptions.get("market_factors", {})
+                }
+                result["indicators"]["market_factors"] = market_indicators
+
+            # DJ30 Stock Tickers
+            if category in ["all", "dj30", "stocks"]:
+                dj30_tickers = get_dj30_tickers()
+                dj30_indicators = {
+                    "tickers": sorted(dj30_tickers),
+                    "count": len(dj30_tickers),
+                    "note": "For DJ30 stocks, use ticker symbols (e.g., 'AAPL', 'MSFT') with price columns like 'open_AAPL', 'close_MSFT', etc."
+                }
+                result["indicators"]["dj30_stocks"] = dj30_indicators
+
+            # Company Fundamentals
+            if category in ["all", "fundamentals"]:
+                firm_tickers = get_firm_tickers()
+                fundamental_metrics = [
+                    "EPS", "DPS", "ROA", "ROE", "NAV", "GRM", "EBS",
+                    "BPS", "CPS", "SAL", "NET"
+                ]
+                fundamentals_info = {
+                    "tickers": sorted(firm_tickers),
+                    "metrics": fundamental_metrics,
+                    "count_tickers": len(firm_tickers),
+                    "count_metrics": len(fundamental_metrics),
+                    "note": "Fundamental metrics are available per ticker. Format: 'EPS_AAPL_MEDEST', 'ROE_MSFT_ACTUAL', etc."
+                }
+                result["indicators"]["company_fundamentals"] = fundamentals_info
+
+            # Create a summary message
+            summary_parts = []
+            if "macroeconomic" in result["indicators"]:
+                summary_parts.append(f"{result['indicators']['macroeconomic']['count']} macroeconomic indicators")
+            if "market_factors" in result["indicators"]:
+                summary_parts.append(f"{result['indicators']['market_factors']['count']} market factors")
+            if "dj30_stocks" in result["indicators"]:
+                summary_parts.append(f"{result['indicators']['dj30_stocks']['count']} DJ30 stock tickers")
+            if "company_fundamentals" in result["indicators"]:
+                summary_parts.append(f"{result['indicators']['company_fundamentals']['count_tickers']} companies with fundamentals")
+
+            result["summary"] = f"Found: {', '.join(summary_parts)}"
+
+            return json.dumps(result, indent=2)
 
         except Exception as e:
             return json.dumps({
                 "success": False,
                 "error": str(e)
-            })
+            }, indent=2)
 
