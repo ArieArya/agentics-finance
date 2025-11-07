@@ -61,18 +61,25 @@ def test_data_files():
 
     data_dir = os.path.join(os.path.dirname(__file__), "data")
 
-    macro_file = os.path.join(data_dir, "macro_factors_new.csv")
-    market_file = os.path.join(data_dir, "market_factors_new.csv")
+    # Check for merged data (either single file or split files)
+    merged_file = os.path.join(data_dir, "merged_data.csv")
+    merged_part1 = os.path.join(data_dir, "merged_data_part1.csv")
 
-    if not os.path.exists(macro_file):
-        print(f"✗ Macro data file not found: {macro_file}")
+    if not os.path.exists(merged_file) and not os.path.exists(merged_part1):
+        print(f"✗ Merged data file not found")
+        print(f"  Expected either: {merged_file}")
+        print(f"  Or split files: merged_data_part1.csv, merged_data_part2.csv, etc.")
         return False
-    print(f"✓ Macro data file found")
 
-    if not os.path.exists(market_file):
-        print(f"✗ Market data file not found: {market_file}")
-        return False
-    print(f"✓ Market data file found")
+    if os.path.exists(merged_file):
+        print(f"✓ Merged data file found: merged_data.csv")
+    else:
+        # Count split files
+        part_count = 0
+        for i in range(1, 5):
+            if os.path.exists(os.path.join(data_dir, f"merged_data_part{i}.csv")):
+                part_count += 1
+        print(f"✓ Merged data split files found: {part_count} parts")
 
     # Try loading the data
     try:
@@ -127,12 +134,8 @@ def test_tools():
 
     try:
         from tools import (
-            DateRangeQueryTool,
-            IndicatorStatsTool,
             AvailableIndicatorsTool,
-            VolatilityAnalysisTool,
-            CorrelationAnalysisTool,
-            FindExtremeValuesTool,
+            UnifiedTransductionTool,
             TimeSeriesPlotTool,
             CorrelationHeatmapTool,
             VolatilityPlotTool,
