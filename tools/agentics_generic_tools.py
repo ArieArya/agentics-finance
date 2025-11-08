@@ -87,196 +87,64 @@ class UnifiedTransductionTool(BaseTool):
                 # If 10MB is too large for the system, use maximum allowed
                 csv.field_size_limit(sys.maxsize)
 
-            # MEMORY OPTIMIZATION: Pre-filter CSV using pandas before loading into Agentics
-            # This avoids loading the entire 194MB CSV into memory when we only need a date range
-            print(f"\n📂 Loading and filtering merged dataset (memory-optimized)")
+            # Load the full dataset first
+            print(f"\n📂 Loading merged dataset")
             print(f"📅 Date column: {date_column}")
-            print(f"📅 Target date range: {start_date} to {end_date}")
+            agentics = AG.from_csv(csv_path)
+            print(f"✅ Loaded {len(agentics.states):,} total rows with {len(agentics.atype.model_fields)} columns")
 
-            # Try to get memory usage info (if psutil is available)
-            try:
-                import psutil
-                import os as os_module
-                process = psutil.Process(os_module.getpid())
-                mem_before = process.memory_info().rss / 1024 / 1024  # MB
-                print(f"💾 Memory before loading: {mem_before:.1f} MB")
-            except ImportError:
-                mem_before = None
-                print("💾 Memory profiling not available (psutil not installed)")
+            # Filter to selected columns if provided (using Agentics __call__ method)
+            if selected_columns is not None and len(selected_columns) > 0:
+                # Always include Date column for filtering, and ensure it comes first
+                # Remove Date from selected_columns if present to avoid duplicates
+                selected_without_date = [col for col in selected_columns if col != "Date"]
+                # Put Date first, then the rest of the selected columns
+                columns_to_include = ["Date"] + selected_without_date
+                print(f"\n🔧 Filtering to {len(columns_to_include)} selected columns: {', '.join(columns_to_include[:5])}...")
 
-            # MEMORY OPTIMIZATION: Use pandas to filter CSV before loading into Agentics
-            # NOTE: This still loads the entire CSV once, but immediately filters and deletes the full dataframe.
-            # This reduces peak memory usage compared to loading everything into Agentics first.
-            # For even better memory efficiency, chunked reading could be implemented, but that's more complex.
-            print(f"🔍 Filtering CSV by date range before loading (memory optimization)...")
-            from utils.csv_reader import read_merged_data_csv
-
-            chunk_df_loaded = False  # Initialize flag
-
-            try:
-                # Determine which columns to load
-                if selected_columns is not None and len(selected_columns) > 0:
-                    # Always include Date column
-                    columns_to_load = ["Date"] + [col for col in selected_columns if col != "Date"]
-                    print(f"📋 Will load {len(columns_to_load)} columns: {', '.join(columns_to_load[:5])}...")
-                else:
-                    columns_to_load = None  # Load all columns
-                    print(f"📋 Will load all columns")
-
-                # Load CSV and filter in one pass
-                # NOTE: This still loads the full CSV, but we filter immediately and delete it
-                print(f"📖 Loading CSV and filtering to date range...")
-                print(f"⚠️  Note: Loading full CSV to filter (this may use significant memory)...")
-                full_df = read_merged_data_csv(data_dir)
-
-                # Convert Date column to datetime for proper comparison
-                full_df[date_column] = pd.to_datetime(full_df[date_column], errors='coerce')
-
-                # Filter to date range
-                mask = (full_df[date_column] >= pd.to_datetime(start_date)) & (full_df[date_column] <= pd.to_datetime(end_date))
-                chunk_df = full_df[mask].copy()
-
-                # Free memory by deleting the full dataframe
-                del full_df
-
-                if len(chunk_df) == 0:
-                    print(f"❌ ERROR: No data found for date range {start_date} to {end_date}")
-                    return json.dumps({
-                        "success": False,
-                        "error": f"No data found for date range {start_date} to {end_date}"
-                    }, indent=2)
-
-                print(f"✅ Found {len(chunk_df):,} rows in date range")
-
-                # Select columns if specified
-                if columns_to_load:
-                    # Only include columns that actually exist in the DataFrame
-                    available_cols = [col for col in columns_to_load if col in chunk_df.columns]
-                    if "Date" not in available_cols:
-                        available_cols = ["Date"] + [col for col in available_cols if col != "Date"]
-                    chunk_df = chunk_df[available_cols]
-                    print(f"✅ Filtered to {len(available_cols)} columns")
-
-                print(f"✅ Final dataset: {len(chunk_df):,} rows × {len(chunk_df.columns)} columns")
-
-                # Convert to CSV string and load into Agentics
-                # This is more memory-efficient than loading the entire file
-                csv_buffer = io.StringIO()
-                chunk_df.to_csv(csv_buffer, index=False)
-                csv_string = csv_buffer.getvalue()
-                csv_buffer.close()
-
-                # Free memory
-                del chunk_df
-                del csv_buffer
-
-                # Load into Agentics from the CSV string
-                # AG.from_csv() can accept a string directly
-                agentics = AG.from_csv(csv_string)
-                print(f"✅ Agentics object created with {len(agentics.states):,} states")
-
-                # Memory check after loading
-                try:
-                    if mem_before is not None:
-                        mem_after = process.memory_info().rss / 1024 / 1024  # MB
-                        mem_used = mem_after - mem_before
-                        print(f"💾 Memory after loading: {mem_after:.1f} MB (used: {mem_used:.1f} MB)")
-                except:
-                    pass
-
-                # Mark that we used the optimized path
-                chunk_df_loaded = True
-
-            except MemoryError as e:
-                # Handle memory errors specifically
-                print(f"❌ MEMORY ERROR: {e}")
-                print(f"💡 Suggestion: Try selecting fewer columns or a smaller date range")
+                # Use Agentics __call__ method to filter to only selected columns
+                # This creates a new AG with only the specified fields
+                # The order of arguments determines the order of fields in the model
+                agentics = agentics(*columns_to_include)
+                print(f"✅ Filtered dataset to {len(columns_to_include)} columns (Date first)")
+            else:
+                print(f"❌ You must select at least one column to analyze")
                 return json.dumps({
                     "success": False,
-                    "error": f"Memory error: {str(e)}. Try selecting fewer columns or a smaller date range.",
-                    "error_type": "MemoryError"
-                }, indent=2)
-            except Exception as e:
-                # Fallback to original method if optimization fails
-                print(f"⚠️  Memory optimization failed: {e}")
-                print(f"🔄 Falling back to standard loading method...")
-                print(f"Error details: {str(e)}")
-                print(f"Error type: {type(e).__name__}")
+                    "error": "You must select at least one column to analyze"
+                })
 
-                try:
-                    # Load the full dataset (original method)
-                    agentics = AG.from_csv(csv_path)
-                    print(f"✅ Loaded {len(agentics.states):,} total rows with {len(agentics.atype.model_fields)} columns")
-                    chunk_df_loaded = False
-                except MemoryError as e2:
-                    print(f"❌ MEMORY ERROR during fallback: {e2}")
-                    return json.dumps({
-                        "success": False,
-                        "error": f"Memory error: {str(e2)}. The dataset is too large for the available memory. Try selecting fewer columns or a smaller date range.",
-                        "error_type": "MemoryError"
-                    }, indent=2)
+            # Find the indices that correspond to start_date and end_date
+            # Agentics creates states where each state has attributes corresponding to CSV columns
+            # We need to find which states have Date values in our range
+            print(f"\n🔎 Searching for date range indices using column '{date_column}'...")
+            start_index = None
+            end_index = None
 
-            # If we used the optimized path, columns are already filtered and date range is already applied
-            # If we used the fallback path, we need to filter columns and dates
-            if chunk_df_loaded:
-                # We used the optimized path - data is already filtered
-                print(f"✅ Data already filtered to date range and selected columns")
-                filtered_agentics = agentics
-                num_rows = len(filtered_agentics.states)
-            else:
-                # Fallback path - need to filter columns and dates
-                # Filter to selected columns if provided (using Agentics __call__ method)
-                if selected_columns is not None and len(selected_columns) > 0:
-                    # Always include Date column for filtering, and ensure it comes first
-                    # Remove Date from selected_columns if present to avoid duplicates
-                    selected_without_date = [col for col in selected_columns if col != "Date"]
-                    # Put Date first, then the rest of the selected columns
-                    columns_to_include = ["Date"] + selected_without_date
-                    print(f"\n🔧 Filtering to {len(columns_to_include)} selected columns: {', '.join(columns_to_include[:5])}...")
+            for i, state in enumerate(agentics.states):
+                state_date = getattr(state, date_column, None)
+                if state_date:
+                    # Compare dates as strings (they're in YYYY-MM-DD format)
+                    if start_index is None and state_date >= start_date:
+                        start_index = i
+                    if state_date <= end_date:
+                        end_index = i + 1  # +1 because filter_states uses [start:end)
 
-                    # Use Agentics __call__ method to filter to only selected columns
-                    # This creates a new AG with only the specified fields
-                    # The order of arguments determines the order of fields in the model
-                    agentics = agentics(*columns_to_include)
-                    print(f"✅ Filtered dataset to {len(columns_to_include)} columns (Date first)")
-                else:
-                    print(f"❌ You must select at least one column to analyze")
-                    return json.dumps({
-                        "success": False,
-                        "error": "You must select at least one column to analyze"
-                    })
+            if start_index is None or end_index is None:
+                print(f"❌ ERROR: No data found for date range {start_date} to {end_date}")
+                return json.dumps({
+                    "success": False,
+                    "error": f"No data found for date range {start_date} to {end_date}"
+                })
 
-                # Find the indices that correspond to start_date and end_date
-                # Agentics creates states where each state has attributes corresponding to CSV columns
-                # We need to find which states have Date values in our range
-                print(f"\n🔎 Searching for date range indices using column '{date_column}'...")
-                start_index = None
-                end_index = None
+            # Calculate the number of rows in our date range
+            num_rows = end_index - start_index
+            print(f"📊 Found date range: rows {start_index} to {end_index} ({num_rows:,} total rows)")
 
-                for i, state in enumerate(agentics.states):
-                    state_date = getattr(state, date_column, None)
-                    if state_date:
-                        # Compare dates as strings (they're in YYYY-MM-DD format)
-                        if start_index is None and state_date >= start_date:
-                            start_index = i
-                        if state_date <= end_date:
-                            end_index = i + 1  # +1 because filter_states uses [start:end)
-
-                if start_index is None or end_index is None:
-                    print(f"❌ ERROR: No data found for date range {start_date} to {end_date}")
-                    return json.dumps({
-                        "success": False,
-                        "error": f"No data found for date range {start_date} to {end_date}"
-                    })
-
-                # Calculate the number of rows in our date range
-                num_rows = end_index - start_index
-                print(f"📊 Found date range: rows {start_index} to {end_index} ({num_rows:,} total rows)")
-
-                # Filter the dataset to the date range first
-                print(f"\n🔽 Filtering dataset to date range...")
-                filtered_agentics = agentics.filter_states(start=start_index, end=end_index)
-                print(f"✅ Filtered dataset contains {len(filtered_agentics.states):,} states")
+            # Filter the dataset to the date range first
+            print(f"\n🔽 Filtering dataset to date range...")
+            filtered_agentics = agentics.filter_states(start=start_index, end=end_index)
+            print(f"✅ Filtered dataset contains {len(filtered_agentics.states):,} states")
 
             # Apply uniform sampling if we have too many rows
             TARGET_SAMPLE_SIZE = 100
