@@ -368,7 +368,7 @@ class UnifiedTransductionTool(BaseTool):
             if hasattr(reduced, 'areduce_batches') and reduced.areduce_batches:
                 print(f"\n 🔽 INTERMEDIATE BATCH RESULTS ({len(reduced.areduce_batches)} batches):")
                 for i, batch_result in enumerate(reduced.areduce_batches, 1):
-                    print(f"\n--- Batch {i + 1} ---")
+                    print(f"\n--- Batch {i} ---")
                     if hasattr(batch_result, 'model_dump_json'):
                         print(batch_result.model_dump_json(indent=2))
                     else:
