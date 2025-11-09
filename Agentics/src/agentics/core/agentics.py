@@ -233,7 +233,7 @@ class AG(BaseModel, Generic[T]):
 
         class GeneratedAtype(BaseModel):
             python_code: Optional[str] = Field(
-                None, description="Python Code for the described Pydantic type"
+                None, description="Python Code for the described Pydantic type. Make sure that all fields have detailed and verbose descriptions."
             )
             methods: list[str] = Field(None, description="Methods for the class above")
 

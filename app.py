@@ -87,6 +87,26 @@ st.markdown("""
     [data-testid="stSidebar"] > div:first-child {
         overflow-y: auto;
     }
+
+    /* Style for example question buttons */
+    .example-question-button {
+        text-align: left;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid #e0e0e0;
+        background-color: #f8f9fa;
+        color: #333;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+    }
+
+    .example-question-button:hover {
+        background-color: #e7f3ff;
+        border-color: #1f77b4;
+        transform: translateX(4px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,6 +125,9 @@ if "agent_logs" not in st.session_state:
 
 if "show_logs" not in st.session_state:
     st.session_state.show_logs = True
+
+if "user_input" not in st.session_state:
+    st.session_state.user_input = ""
 
 if "selected_transduction_columns" not in st.session_state:
     st.session_state.selected_transduction_columns = []
@@ -127,6 +150,125 @@ def get_merged_data_columns():
     except Exception as e:
         st.error(f"Error reading column names: {e}")
         return []
+
+
+def get_columns_for_question(question: str, all_columns: list) -> list:
+    """
+    Manually map questions to their required columns.
+    Returns a list of exact column names that should be pre-selected.
+    """
+    # Define question-to-columns mapping
+    question_mappings = {
+        # Question 1: Explain how AMZN and AAPL's strategy shifted over time, and any major investments they made from 2020 onwards
+        "explain how amzn and aapl's strategy shifted over time, and any major investments they made from 2020 onwards": [
+            # News and earnings for strategy/investment information
+            'news_AAPL', 'news_AMZN', 'Earningcall_AAPL', 'Earningcall_AMZN', 'Headlines',
+            # Price data to track performance
+            'open_AAPL', 'high_AAPL', 'low_AAPL', 'close_AAPL', 'adj_close_AAPL', 'volume_AAPL',
+            # Fundamental metrics for strategy analysis
+            'EPS_AAPL_ACTUAL', 'EPS_AAPL_MEDEST', 'EPS_AMZN_ACTUAL', 'EPS_AMZN_MEDEST',
+            'ROE_AAPL_ACTUAL', 'ROE_AMZN_ACTUAL',
+            'SAL_AAPL_ACTUAL', 'SAL_AMZN_ACTUAL',
+            'NET_AAPL_ACTUAL', 'NET_AMZN_ACTUAL'
+        ],
+
+        # Question 2: Why did the stock price of AAPL drop in March 2020?
+        "why did the stock price of aapl drop in march 2020?": [
+            # Price data to see the drop
+            'open_AAPL', 'high_AAPL', 'low_AAPL', 'close_AAPL', 'adj_close_AAPL', 'volume_AAPL',
+            # News to explain why
+            'news_AAPL', 'news_market', 'Headlines',
+            # Earnings calls around that time
+            'Earningcall_AAPL',
+            # Market context (use original CSV column names - tool will sanitize them)
+            '^GSPC', '^VIX'
+        ],
+
+        # Question 3: What were the key factors behind NVDA's stock price surge in 2023?
+        # Note: NVDA doesn't have price columns in this dataset, so we focus on news, earnings, and fundamentals
+        "what were the key factors behind nvda's stock price surge in 2023?": [
+            # News and earnings
+            'news_NVDA', 'Earningcall_NVDA', 'Headlines',
+            # Fundamentals
+            'EPS_NVDA_ACTUAL', 'EPS_NVDA_MEDEST',
+            'ROE_NVDA_ACTUAL',
+            'SAL_NVDA_ACTUAL', 'NET_NVDA_ACTUAL',
+            # Market context (use original CSV column names - tool will sanitize them)
+            '^GSPC', '^VIX'
+        ],
+
+        # Question 4: Analyze the relationship between MSFT's earnings announcements and its stock price movements from 2020-2023
+        "analyze the relationship between msft's earnings announcements and its stock price movements from 2020-2023": [
+            # Price data
+            'open_MSFT', 'high_MSFT', 'low_MSFT', 'close_MSFT', 'adj_close_MSFT', 'volume_MSFT',
+            # Earnings calls
+            'Earningcall_MSFT',
+            # News
+            'news_MSFT', 'Headlines',
+            # Earnings fundamentals
+            'EPS_MSFT_ACTUAL', 'EPS_MSFT_MEDEST',
+            'ROE_MSFT_ACTUAL',
+            'NET_MSFT_ACTUAL'
+        ],
+
+        # Question 5: What market events and company-specific news drove JPM's volatility during the 2022-2023 period?
+        "what market events and company-specific news drove jpm's volatility during the 2022-2023 period?": [
+            # Price data for volatility
+            'open_JPM', 'high_JPM', 'low_JPM', 'close_JPM', 'adj_close_JPM', 'volume_JPM',
+            # News
+            'news_JPM', 'news_market', 'Headlines',
+            # Earnings
+            'Earningcall_JPM',
+            # Market context (use original CSV column names - tool will sanitize them)
+            '^GSPC', '^VIX', 'DGS10',
+            # Fundamentals (JPM uses returnonequity instead of ROE)
+            'returnonequity_JPM'
+        ]
+    }
+
+    # Normalize question for lookup
+    question_normalized = question.lower().strip()
+
+    # Check for exact match
+    if question_normalized in question_mappings:
+        selected_cols = question_mappings[question_normalized]
+        # Filter to only include columns that actually exist in the dataset
+        return [col for col in selected_cols if col in all_columns]
+
+    # If no match found, return empty list
+    return []
+
+
+def set_example_question(question: str):
+    """Set the example question in the text input and pre-select relevant columns."""
+    # Set the question text
+    st.session_state.user_input = question
+
+    # Get all columns and determine which ones to select
+    all_columns = get_merged_data_columns()
+    if all_columns:
+        relevant_cols = get_columns_for_question(question, all_columns)
+        # Remove duplicates and ensure we have a clean list
+        relevant_cols = list(set(relevant_cols))
+        # Set session state - this will be reflected in checkboxes on next render
+        st.session_state.selected_transduction_columns = relevant_cols
+
+        # Clear all existing checkbox states so they can be reinitialized from selected_transduction_columns
+        # This prevents the error of modifying widget state after instantiation
+        all_columns_list = get_merged_data_columns()
+        if all_columns_list:
+            for col in all_columns_list:
+                checkbox_key = f"col_{col}"
+                # Delete existing checkbox state - it will be reinitialized on next render
+                if checkbox_key in st.session_state:
+                    del st.session_state[checkbox_key]
+
+        print(f"🔧 Set {len(relevant_cols)} columns for question: {question[:50]}...")
+        if relevant_cols:
+            print(f"   Selected columns: {relevant_cols}")
+
+    # Rerun to update the UI with new selections
+    st.rerun()
 
 
 def display_transduction_flow():
@@ -1452,6 +1594,11 @@ def render_sector_portfolio(config: dict):
 
 def run_analysis_with_logs(user_input: str, conversation_history: list, selected_columns: list = None) -> str:
     """Run analysis and capture stdout/stderr to display in logs."""
+    # Set selected columns in the tool module before running analysis
+    # This ensures the tool reads the deterministic UI selection, not agent-provided values
+    from tools.agentics_generic_tools import set_selected_columns
+    set_selected_columns(selected_columns)
+
     # Create a StringIO object to capture output
     captured_output = StringIO()
     original_stdout = sys.stdout
@@ -1462,7 +1609,7 @@ def run_analysis_with_logs(user_input: str, conversation_history: list, selected
         sys.stdout = captured_output
         sys.stderr = captured_output
 
-        # Run the analysis with selected columns
+        # Run the analysis (selected columns are already set in tool module)
         response = run_analysis(user_input, conversation_history, selected_columns)
 
         # Restore original stdout/stderr
@@ -1606,27 +1753,52 @@ with st.sidebar:
             other_cols = [col for col in other_columns if col not in macro_cols + market_cols + dj30_price_cols + fundamental_cols + news_cols]
 
             # Initialize selected columns if empty
-            if not st.session_state.selected_transduction_columns:
+            if "selected_transduction_columns" not in st.session_state:
                 st.session_state.selected_transduction_columns = []
 
-            # Category selection with checkboxes
-            selected = []
+            # Build selected list from session state first (to ensure it reflects programmatic changes)
+            # This ensures programmatically set columns are included
+            # Make a copy to avoid reference issues
+            selected = list(st.session_state.selected_transduction_columns) if st.session_state.selected_transduction_columns else []
 
+            # Category selection with checkboxes
             # Macro columns
             if macro_cols:
                 with st.expander(f"📊 Macroeconomic Indicators ({len(macro_cols)})", expanded=False):
                     for col in sorted(macro_cols):
-                        is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                        # Use session state key for checkbox to maintain state
+                        checkbox_key = f"col_{col}"
+                        # Initialize from session state if not set
+                        if checkbox_key not in st.session_state:
+                            st.session_state[checkbox_key] = col in st.session_state.selected_transduction_columns
+
+                        is_checked = st.checkbox(col, value=st.session_state[checkbox_key], key=checkbox_key)
+                        # Update selected list based on checkbox state
                         if is_checked:
-                            selected.append(col)
+                            if col not in selected:
+                                selected.append(col)
+                        else:
+                            if col in selected:
+                                selected.remove(col)
 
             # Market columns
             if market_cols:
                 with st.expander(f"📈 Market Factors ({len(market_cols)})", expanded=False):
                     for col in sorted(market_cols):
-                        is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                        # Use session state key for checkbox to maintain state
+                        checkbox_key = f"col_{col}"
+                        # Initialize from session state if not set
+                        if checkbox_key not in st.session_state:
+                            st.session_state[checkbox_key] = col in st.session_state.selected_transduction_columns
+
+                        is_checked = st.checkbox(col, value=st.session_state[checkbox_key], key=checkbox_key)
+                        # Update selected list based on checkbox state
                         if is_checked:
-                            selected.append(col)
+                            if col not in selected:
+                                selected.append(col)
+                        else:
+                            if col in selected:
+                                selected.remove(col)
 
             # DJ30 Price columns
             if dj30_price_cols:
@@ -1644,9 +1816,20 @@ with st.sidebar:
                     for ticker in sorted(ticker_groups.keys()):
                         with st.expander(f"  {ticker} ({len(ticker_groups[ticker])} columns)", expanded=False):
                             for col in sorted(ticker_groups[ticker]):
-                                is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                                # Use session state key for checkbox to maintain state
+                                checkbox_key = f"col_{col}"
+                                # Initialize from session state if not set
+                                if checkbox_key not in st.session_state:
+                                    st.session_state[checkbox_key] = col in st.session_state.selected_transduction_columns
+
+                                is_checked = st.checkbox(col, value=st.session_state[checkbox_key], key=checkbox_key)
+                                # Update selected list based on checkbox state
                                 if is_checked:
-                                    selected.append(col)
+                                    if col not in selected:
+                                        selected.append(col)
+                                else:
+                                    if col in selected:
+                                        selected.remove(col)
 
             # Fundamental columns
             if fundamental_cols:
@@ -1664,32 +1847,68 @@ with st.sidebar:
                     for metric in sorted(metric_groups.keys()):
                         with st.expander(f"  {metric} ({len(metric_groups[metric])} columns)", expanded=False):
                             for col in sorted(metric_groups[metric]):
-                                is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                                # Use session state key for checkbox to maintain state
+                                checkbox_key = f"col_{col}"
+                                # Initialize from session state if not set
+                                if checkbox_key not in st.session_state:
+                                    st.session_state[checkbox_key] = col in st.session_state.selected_transduction_columns
+
+                                is_checked = st.checkbox(col, value=st.session_state[checkbox_key], key=checkbox_key)
+                                # Update selected list based on checkbox state
                                 if is_checked:
-                                    selected.append(col)
+                                    if col not in selected:
+                                        selected.append(col)
+                                else:
+                                    if col in selected:
+                                        selected.remove(col)
 
             # News columns
             if news_cols:
                 with st.expander(f"📰 News & Earnings Calls ({len(news_cols)})", expanded=False):
                     for col in sorted(news_cols):
-                        is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                        # Use session state key for checkbox to maintain state
+                        checkbox_key = f"col_{col}"
+                        # Initialize from session state if not set
+                        if checkbox_key not in st.session_state:
+                            st.session_state[checkbox_key] = col in st.session_state.selected_transduction_columns
+
+                        is_checked = st.checkbox(col, value=st.session_state[checkbox_key], key=checkbox_key)
+                        # Update selected list based on checkbox state
                         if is_checked:
-                            selected.append(col)
+                            if col not in selected:
+                                selected.append(col)
+                        else:
+                            if col in selected:
+                                selected.remove(col)
 
             # Other columns
             if other_cols:
                 with st.expander(f"🔹 Other Columns ({len(other_cols)})", expanded=False):
                     for col in sorted(other_cols):
-                        is_checked = st.checkbox(col, value=col in st.session_state.selected_transduction_columns, key=f"col_{col}")
+                        # Use session state key for checkbox to maintain state
+                        checkbox_key = f"col_{col}"
+                        # Initialize from session state if not set
+                        if checkbox_key not in st.session_state:
+                            st.session_state[checkbox_key] = col in st.session_state.selected_transduction_columns
+
+                        is_checked = st.checkbox(col, value=st.session_state[checkbox_key], key=checkbox_key)
+                        # Update selected list based on checkbox state
                         if is_checked:
-                            selected.append(col)
+                            if col not in selected:
+                                selected.append(col)
+                        else:
+                            if col in selected:
+                                selected.remove(col)
 
-            # Update session state only if selection changed
-            if set(selected) != set(st.session_state.selected_transduction_columns):
-                st.session_state.selected_transduction_columns = selected
+            # Always update session state with current selection (removes duplicates)
+            # This ensures the session state reflects both programmatic changes and user interactions
+            final_selected = list(set(selected))
+            st.session_state.selected_transduction_columns = final_selected
 
-            # Show summary
-            total_selected = len(selected)
+
+            # Show summary - use the final selected count
+            # Use session state for display to ensure consistency
+            total_selected = len(st.session_state.selected_transduction_columns)
             st.caption(f"📊 **{total_selected} columns selected** (Date always included)")
 
             # Quick actions
@@ -1716,89 +1935,20 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("#### 💡 Example Questions")
+    st.caption("Click any question to load it and auto-select relevant columns")
 
-    with st.expander("📊 Market Analysis"):
-        st.markdown("""
-        - Compare performance of S&P 500, Gold, and Bitcoin from 2020 to 2023
-        - What was the maximum drawdown during the 2008 financial crisis?
-        - Show me S&P 500 with 50 and 200-day moving averages
-        - Calculate monthly returns for Bitcoin in 2021
-        """)
+    # 5 carefully chosen diagnostic questions with manually pre-selected columns
+    questions = [
+        "Explain how AMZN and AAPL's strategy shifted over time, and any major investments they made from 2020 onwards",
+        "Why did the stock price of AAPL drop in March 2020?",
+        "What were the key factors behind NVDA's stock price surge in 2023?",
+        "Analyze the relationship between MSFT's earnings announcements and its stock price movements from 2020-2023",
+        "What market events and company-specific news drove JPM's volatility during the 2022-2023 period?"
+    ]
 
-    with st.expander("📈 Economic Analysis"):
-        st.markdown("""
-        - What are the year-over-year inflation trends from 2020 to 2023?
-        - Create a dashboard showing unemployment, inflation, and retail sales during COVID
-        - How much did the unemployment rate change from 2019 to 2021?
-        - Show the relationship between oil prices and inflation
-        """)
-
-    with st.expander("⚠️ Risk & Volatility"):
-        st.markdown("""
-        - Why was the S&P 500 so volatile in March 2020?
-        - Explain the volatility spike in oil prices during 2008
-        - What caused Bitcoin's extreme volatility in 2021?
-        - What indicators moved together during the 2008 crisis?
-        - Identify correlated movements on March 11, 2020
-        - What was the volatility of the S&P 500 during March 2020?
-        - Show me the drawdown chart for Bitcoin from 2021 to 2022
-        - Find the most volatile periods for oil prices
-        - Analyze drawdowns and recovery time for the stock market
-        """)
-
-    with st.expander("🔗 Correlations & Relationships"):
-        st.markdown("""
-        - Show me the correlation between VIX and S&P 500
-        - Create a scatter plot of unemployment vs stock market performance
-        - What's the correlation between gold, Bitcoin, and stocks?
-        - Analyze the relationship between interest rates and inflation
-        """)
-
-    with st.expander("📈 Portfolio Recommendations"):
-        st.markdown("""
-        - Recommend a balanced long/short portfolio of 5 stocks each
-        - Which companies should I long based on value strategy?
-        - Generate growth-focused portfolio recommendations
-        - What are the best quality companies to invest in right now?
-        - Compare portfolio recommendations: value vs growth strategies
-        """)
-
-    with st.expander("📊 DJ30 Portfolio Strategies"):
-        st.markdown("""
-        - Create a portfolio going long 5 most volatile stocks and short 5 least volatile stocks in the past year
-        - Build a momentum-based portfolio with top 5 gainers and bottom 5 losers from 2023
-        - Construct a sector-diversified portfolio with best stock from each sector
-        - Which DJ30 stocks had the highest volatility in 2024?
-        - Show me performance comparison of all tech stocks in DJ30 from 2020-2024
-        """)
-
-    with st.expander("💹 DJ30 Stock Analysis"):
-        st.markdown("""
-        - Show me a candlestick chart for AAPL from 2023 to 2024
-        - Compare price performance of AAPL, MSFT, and GOOGL over the past year
-        - What was the volatility of AAPL during 2020?
-        - Analyze returns for MSFT from 2020 to 2023
-        - Create a volatility chart for NVDA showing rolling 30-day volatility
-        - What was the price range for JPM in 2022?
-        """)
-
-    with st.expander("💼 Company Fundamentals"):
-        st.markdown("""
-        - What are the fundamentals for AAPL?
-        - Compare AAPL, MSFT, and GOOGL on ROE, P/E ratio, and EPS growth
-        - Find all companies with ROE above 20% and P/E below 20
-        - Show me AAPL's EPS and ROE evolution from 2015 to 2023
-        - Create a scatter plot of ROE vs P/E ratio for all companies
-        - How does AAPL's ROE correlate with the Fed Funds rate?
-        """)
-
-    with st.expander("📰 News & Events"):
-        st.markdown("""
-        - What were the most popular news on January 22nd, 2012?
-        - Show me headlines from the 2008 financial crisis
-        - What major events affected the market during the COVID pandemic?
-        - Create a timeline of significant market events from 2020-2022
-        """)
+    for i, q in enumerate(questions, 1):
+        if st.button(f"{i}. {q}", key=f"q_{i}", use_container_width=True):
+            set_example_question(q)
 
 # Page selector in sidebar
 with st.sidebar:

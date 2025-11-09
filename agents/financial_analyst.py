@@ -126,12 +126,8 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             context += f"{role}: {content}\n\n"
         context += "---\n\n"
 
-    # Build column selection instruction
-    column_instruction = ""
-    if selected_columns and len(selected_columns) > 0:
-        column_instruction = f"     * IMPORTANT: The user has selected specific columns to analyze. When calling UnifiedTransductionTool, you MUST include the selected_columns parameter with this exact Python list: {json.dumps(selected_columns)}\n"
-    else:
-        column_instruction = "     * Note: If no columns are selected, all columns will be analyzed\n"
+    # Note: Column selection is handled automatically by the tool based on UI selection
+    # No need to pass selected_columns parameter - the tool reads it from the UI state
 
     task = Task(
         description=(
@@ -149,7 +145,7 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
             "     * Use this for questions about patterns, relationships, cause-effect analysis, or comprehensive summaries\n"
             "     * The transduction tool analyzes a comprehensive merged dataset containing macroeconomic indicators, market factors, DJ30 stock prices, company fundamentals, and news data\n"
             "     * The tool can analyze large date ranges and synthesize insights from multiple data points\n"
-            f"{column_instruction}"
+            "     * Note: Column selection is handled automatically based on user's UI selection - you don't need to specify columns\n"
             "   - For VISUALIZATIONS: Use visualization tools to create charts and plots\n"
             "     * IMPORTANT: If you're unsure about valid indicator names, use AvailableIndicatorsTool first\n"
             "     * TimeSeriesPlotTool, CorrelationHeatmapTool, VolatilityPlotTool, DistributionPlotTool for basic charts\n"
@@ -180,6 +176,9 @@ def create_analysis_task(agent: Agent, user_question: str, conversation_history:
 
 
 def run_analysis(user_question: str, conversation_history: list = None, selected_columns: list = None) -> str:
+    # Set selected columns in the tool module so the tool can read it deterministically
+    from tools.agentics_generic_tools import set_selected_columns
+    set_selected_columns(selected_columns)
     """
     Run a complete analysis for a user question with conversation context.
 

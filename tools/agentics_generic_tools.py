@@ -15,6 +15,21 @@ import sys
 import io
 import traceback
 
+# Module-level variable to store selected columns from UI
+# This is set by the Streamlit app before running analysis
+_selected_columns_from_ui: Optional[List[str]] = None
+
+
+def set_selected_columns(columns: Optional[List[str]]):
+    """Set the selected columns from the UI. Called by Streamlit app before running analysis."""
+    global _selected_columns_from_ui
+    _selected_columns_from_ui = columns
+
+
+def get_selected_columns() -> Optional[List[str]]:
+    """Get the selected columns from the UI. Called by the tool during execution."""
+    return _selected_columns_from_ui
+
 
 class TransductionAnswer(BaseModel):
     short_answer: str | None = None
@@ -33,10 +48,6 @@ class TransductionInput(BaseModel):
     question: str = Field(..., description="The question to answer")
     start_date: str = Field(..., description="The start date of the data to use for the answer (YYYY-MM-DD)")
     end_date: str = Field(..., description="The end date of the data to use for the answer (YYYY-MM-DD)")
-    selected_columns: Optional[List[str]] = Field(
-        default=None,
-        description="List of column names to include in the analysis. If None, all columns are included. Date column is always included."
-    )
 
 
 class UnifiedTransductionTool(BaseTool):
@@ -54,8 +65,11 @@ class UnifiedTransductionTool(BaseTool):
     )
     args_schema: Type[BaseModel] = TransductionInput
 
-    def _run(self, question: str, start_date: str, end_date: str, selected_columns: Optional[List[str]] = None) -> str:
+    def _run(self, question: str, start_date: str, end_date: str) -> str:
         try:
+            # Get selected columns from UI (set deterministically by user selection)
+            selected_columns = get_selected_columns()
+
             print(f"\n{'='*80}")
             print(f"🔍 Starting Transduction Analysis")
             print(f"{'='*80}")
@@ -95,12 +109,32 @@ class UnifiedTransductionTool(BaseTool):
 
             # Filter to selected columns if provided (using Agentics __call__ method)
             if selected_columns is not None and len(selected_columns) > 0:
+                # Agentics sanitizes column names when creating Pydantic models
+                # (removes special characters like ^, -, etc.)
+                # We need to sanitize the column names to match what's in the model
+                import re
+                def sanitize_field_name(name: str) -> str:
+                    """Sanitize field name to match Agentics' sanitization."""
+                    name = name.strip()
+                    # Remove underscores only from the start
+                    name = re.sub(r"^_+", "", name)
+                    # If the result is alphanumeric, return as-is
+                    if re.fullmatch(r"[a-zA-Z0-9_]+", name):
+                        return name
+                    # Otherwise, remove all non-alphanumeric and non-underscore characters
+                    return re.sub(r"[^\w]", "", name)
+
+                # Sanitize all selected columns to match Agentics model field names
+                sanitized_selected = [sanitize_field_name(col) for col in selected_columns]
+
                 # Always include Date column for filtering, and ensure it comes first
-                # Remove Date from selected_columns if present to avoid duplicates
-                selected_without_date = [col for col in selected_columns if col != "Date"]
+                # Remove Date from sanitized_selected if present to avoid duplicates
+                selected_without_date = [col for col in sanitized_selected if col != "Date"]
                 # Put Date first, then the rest of the selected columns
                 columns_to_include = ["Date"] + selected_without_date
                 print(f"\n🔧 Filtering to {len(columns_to_include)} selected columns: {', '.join(columns_to_include[:5])}...")
+                print(f"   Original columns: {selected_columns[:5]}...")
+                print(f"   Sanitized columns: {columns_to_include[:5]}...")
 
                 # Use Agentics __call__ method to filter to only selected columns
                 # This creates a new AG with only the specified fields
