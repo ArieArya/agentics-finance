@@ -228,7 +228,7 @@ class UnifiedTransductionTool(BaseTool):
                 print(f"✅ No sampling needed ({actual_rows} rows <= {TARGET_SAMPLE_SIZE})")
 
             # Calculate batch size: aim for ~10 batches
-            batch_size = max(2, sampled_rows // 10)  # At least 2 rows per batch
+            batch_size = 10000  # At least 2 rows per batch
             num_batches = (sampled_rows + batch_size - 1) // batch_size  # Ceiling division
             print(f"📦 Batch configuration: {num_batches} batches of ~{batch_size} rows each")
 

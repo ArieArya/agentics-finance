@@ -2,6 +2,7 @@
 Financial Analyst Agent Configuration
 """
 
+
 from agentics import AG
 from crewai import Agent, Task, Crew
 import json
@@ -43,7 +44,7 @@ def create_financial_analyst_agent():
         Agent: Configured CrewAI agent
     """
     # Initialize LLM
-    llm = AG.get_llm_provider()
+    llm = AG.get_llm_provider("watsonx")
 
     # All available tools (transduction + visualizations)
     tools = [

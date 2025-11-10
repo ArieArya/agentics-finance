@@ -63,7 +63,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 3. Install dependencies:
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
 > **Note**: The Agentics framework is automatically installed from the local `Agentics/` directory in editable mode via requirements.txt.
@@ -81,7 +81,7 @@ cp env.example .env
 
 Start the Streamlit application:
 ```bash
-streamlit run app.py
+uv run streamlit run app.py
 ```
 
 The application will open in your browser at `http://localhost:8501`

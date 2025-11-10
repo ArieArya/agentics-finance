@@ -17,7 +17,8 @@ import numpy as np
 from datetime import datetime
 from agents import run_analysis
 from utils import get_data_summary, get_column_descriptions, get_firm_data_summary, get_firm_column_descriptions, get_dj30_data_summary, get_dj30_column_descriptions
-
+from dotenv import load_dotenv
+load_dotenv()
 # Page configuration
 st.set_page_config(
     page_title="Financial Data Analyst",
