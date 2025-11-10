@@ -335,8 +335,6 @@ class UnifiedTransductionTool(BaseTool):
                 print("\n" + "=" * 80)
                 print("🎉 SUCCESS: Analysis complete!")
                 print("=" * 80)
-                print(f"📌 Short Answer: {final_answer.short_answer}")
-                print("=" * 80 + "\n")
 
                 result = {
                     "success": True,
@@ -351,7 +349,6 @@ class UnifiedTransductionTool(BaseTool):
                         "num_batches": num_batches
                     },
                     "question": question,
-                    "short_answer": final_answer.short_answer,
                     "detailed_answer": final_answer.detailed_answer,
                     "explanation": final_answer.explanation
                 }
