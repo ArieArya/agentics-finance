@@ -32,14 +32,13 @@ def get_selected_columns() -> Optional[List[str]]:
 
 
 class TransductionAnswer(BaseModel):
-    short_answer: str | None = None
     detailed_answer: str | None = Field(
         None,
-        description="A detailed Markdown Document reporting evidence for the above answer and a more detailed explanation"
+        description="A detailed multi-paragraph answer with thorough evidence from the dataset."
     )
     explanation: str | None = Field(
         None,
-        description="A detailed explanation of the answer"
+        description="A detailed reasoning and explanation of the above answer."
     )
 
 
@@ -180,19 +179,50 @@ class UnifiedTransductionTool(BaseTool):
             filtered_agentics = agentics.filter_states(start=start_index, end=end_index)
             print(f"✅ Filtered dataset contains {len(filtered_agentics.states):,} states")
 
-            # Apply uniform sampling if we have too many rows
+            # Apply chunk-based sampling if we have too many rows
+            # For each chunk, pick the row with the most non-null cells
             TARGET_SAMPLE_SIZE = 100
             actual_rows = len(filtered_agentics.states)
 
             if actual_rows > TARGET_SAMPLE_SIZE:
-                print(f"\n🎲 Dataset exceeds {TARGET_SAMPLE_SIZE} rows. Applying uniform sampling...")
+                print(f"\n🎲 Dataset exceeds {TARGET_SAMPLE_SIZE} rows. Applying chunk-based sampling...")
                 print(f"   Original rows: {actual_rows:,}")
-                sampling_interval = actual_rows / TARGET_SAMPLE_SIZE
-                print(f"   Sampling interval: ~1 row every {sampling_interval:.1f} rows")
 
-                filtered_agentics = filtered_agentics.get_uniform_sample(TARGET_SAMPLE_SIZE)
+                # Calculate chunk size
+                chunk_size = actual_rows / TARGET_SAMPLE_SIZE
+                num_chunks = TARGET_SAMPLE_SIZE
+                print(f"   Chunk size: ~{chunk_size:.1f} rows per chunk")
+                print(f"   Will select {num_chunks} rows (one per chunk with most non-null values)")
+
+                # Helper function to count non-null values in a state
+                def count_non_null_values(state: BaseModel) -> int:
+                    """Count the number of non-null, non-empty values in a Pydantic model."""
+                    count = 0
+                    for field_name, field_value in state.model_dump().items():
+                        if field_value is not None and field_value != "":
+                            count += 1
+                    return count
+
+                # Sample by chunks: for each chunk, pick the row with most non-null values
+                sampled_states = []
+                for chunk_idx in range(num_chunks):
+                    start_idx = int(chunk_idx * chunk_size)
+                    end_idx = int((chunk_idx + 1) * chunk_size) if chunk_idx < num_chunks - 1 else actual_rows
+
+                    # Get all states in this chunk
+                    chunk_states = filtered_agentics.states[start_idx:end_idx]
+
+                    if chunk_states:
+                        # Find the state with the most non-null values
+                        best_state = max(chunk_states, key=count_non_null_values)
+                        sampled_states.append(best_state)
+
+                # Create new AG object with sampled states
+                filtered_agentics = filtered_agentics.clone()
+                filtered_agentics.states = sampled_states
+
                 sampled_rows = len(filtered_agentics.states)
-                print(f"✅ Sampled down to {sampled_rows:,} rows (uniform temporal distribution)")
+                print(f"✅ Sampled down to {sampled_rows:,} rows (chunk-based, selecting rows with most data)")
             else:
                 sampled_rows = actual_rows
                 print(f"✅ No sampling needed ({actual_rows} rows <= {TARGET_SAMPLE_SIZE})")

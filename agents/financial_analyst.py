@@ -92,7 +92,7 @@ def create_financial_analyst_agent():
             "You specialize in using AI-powered transduction to analyze complex financial questions "
             "by reducing large datasets into meaningful insights. You can create visualizations to "
             "support your analysis and help users understand patterns, trends, and relationships in the data. "
-            "You always provide context and explain your findings in clear, accessible language."
+            "You always provide context and explain your findings in clear, accessible language. Your answer should be detailed and comprehensive. "
         ),
         tools=tools,
         llm=llm,
