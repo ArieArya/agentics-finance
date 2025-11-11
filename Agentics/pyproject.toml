@@ -1,6 +1,7 @@
 [project]
 name = "agentics-py"
-version = "0.0.8"
+# version = "0.0.8"
+dynamic = ["version"]
 description = "Agentics is a Python framework that provides structured, scalable, and semantically grounded agentic computation."
 authors = [
     { name = "Alfio Gliozzo", email = "gliozzo@us.ibm.com" },
@@ -17,6 +18,7 @@ dependencies = [
     "pydantic",
     "crewai[tools]",
     "crewai-tools[mcp]",
+    "crewai[google-genai]",
     "langchain-huggingface (>=0.2.0,<0.3.0)",
     "openapi-python-client (>=0.24.3,<0.25.0)",
     "streamlit (>=1.45.1,<2.0.0)",
@@ -32,6 +34,10 @@ dependencies = [
     "ipywidgets>=8.1.7",
     "aiosqlite>=0.21.0",
     "numerize>=0.12",
+    "hnswlib>=0.8.0",
+    "jsonfinder",
+    "mellea",
+    "litellm>=1.74.9",
 ]
 
 
@@ -102,4 +108,10 @@ explicit = true
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu" },
+]
+
+[tool.uv.workspace]
+members = [
+    "sandbox/polymarkets",
+    "polymarket",
 ]

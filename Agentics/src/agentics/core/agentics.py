@@ -1,7 +1,7 @@
-import asyncio
 import csv
 import io
 import json
+import logging
 import os
 import random
 from collections.abc import Iterable
@@ -30,6 +30,9 @@ from loguru import logger
 from pandas import DataFrame
 from pydantic import BaseModel, Field, ValidationError, create_model
 
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+
+
 from agentics.core.async_executor import (
     PydanticTransducerCrewAI,
     PydanticTransducerVLLM,
@@ -53,10 +56,9 @@ from agentics.core.utils import (
     chunk_list,
     clean_for_json,
     is_str_or_list_of_str,
-    make_states_list_model,
-    remap_dict_keys,
     sanitize_dict_keys,
 )
+from agentics.core.vector_store import VectorStore
 
 AG = TypeVar("AG", bound="AG")
 T = TypeVar("T", bound="BaseModel")
@@ -121,8 +123,8 @@ class AG(BaseModel, Generic[T]):
     transduction_timeout: float | None = None
     verbose_transduction: bool = True
     verbose_agent: bool = False
-    areduce_batch_size: int = Field(
-        10,
+    areduce_batch_size: Optional[int] = Field(
+        None,
         description="The size of the bathes to be used when transduction type is areduce",
     )
     areduce_batches: List[BaseModel] = []
@@ -136,6 +138,7 @@ class AG(BaseModel, Generic[T]):
         },
         description="prompt parameter for initializing Crew and Task",
     )
+    vector_store: VectorStore = Field(default_factory=VectorStore)
 
     class Config:
         model_config = {"arbitrary_types_allowed": True}
@@ -172,6 +175,14 @@ class AG(BaseModel, Generic[T]):
         new_self.states = self.states[start:end]
         return new_self
 
+    def set_default_value(self, field: str, default_value: Any = None) -> AG:
+        new_self = self.clone()
+        for state in self:
+            if getattr(state, field):
+                setattr(state, field, default_value)
+            new_self.append(state)
+        return new_self
+
     def get_random_sample(self, percent: float) -> AG:
         """An AG is returned with randomly selected states, given the percentage of samples to return."""
         if not (0 <= percent <= 1):
@@ -180,43 +191,6 @@ class AG(BaseModel, Generic[T]):
         sample_size = int(len(self.states) * percent)
         output = self.clone()
         output.states = random.sample(self.states, sample_size)
-        return output
-
-    def get_uniform_sample(self, target_count: int) -> AG:
-        """
-        Returns an AG with uniformly sampled states to reach approximately target_count.
-
-        This method samples states at regular intervals to preserve temporal distribution,
-        which is important for time-series data. If the current number of states is already
-        less than or equal to target_count, returns all states unchanged.
-
-        Args:
-            target_count: The desired number of states in the output
-
-        Returns:
-            AG: A new AG object with uniformly sampled states
-
-        Example:
-            >>> ag = AG.from_csv("data.csv")  # 1000 states
-            >>> sampled = ag.get_uniform_sample(100)  # Returns ~100 evenly spaced states
-        """
-        if target_count <= 0:
-            raise ValueError("target_count must be positive")
-
-        total_states = len(self.states)
-
-        # If we already have fewer states than target, return all
-        if total_states <= target_count:
-            return self.clone()
-
-        # Calculate sampling interval
-        interval = total_states / target_count
-
-        # Sample at regular intervals
-        sampled_indices = [int(i * interval) for i in range(target_count)]
-
-        output = self.clone()
-        output.states = [self.states[i] for i in sampled_indices]
         return output
 
     #################
@@ -233,7 +207,7 @@ class AG(BaseModel, Generic[T]):
 
         class GeneratedAtype(BaseModel):
             python_code: Optional[str] = Field(
-                None, description="Python Code for the described Pydantic type. Make sure that all fields have detailed and verbose descriptions."
+                None, description="Python Code for the described Pydantic type"
             )
             methods: list[str] = Field(None, description="Methods for the class above")
 
@@ -243,10 +217,10 @@ class AG(BaseModel, Generic[T]):
             generated_atype_ag = await (
                 AG(
                     atype=GeneratedAtype,
-                    instructions="""Generate python code for the input nl type specs.
-                Make all fields Optional. Use only primitive types for the fields, avoiding nested.
+                    instructions="""Generate python code for the input nl type specs. 
+                Make all fields Optional. Use only primitive types for the fields, avoiding nested. 
                 Provide descriptions for the class and all its fields, using Field(None,description= "...")
-                If the input nl type spec is a question, generate a pydantic type that can be used to
+                If the input nl type spec is a question, generate a pydantic type that can be used to 
                 represent the answer to that question.
                 """,
                 )
@@ -696,22 +670,33 @@ class AG(BaseModel, Generic[T]):
                 return [x.string for x in input_messages.states]
 
         if self.transduction_type == "areduce":
-            if is_str_or_list_of_str(other):
-                chunks = chunk_list(other, chunk_size=self.areduce_batch_size)
-            else:
-                chunks = chunk_list(other.states, chunk_size=self.areduce_batch_size)
 
-            if len(chunks) == 1:
-                self.transduction_type = "amap"
-                self = await (self << str(chunks[0]))
-                self.transduction_type = "areduce"
-                return self
+            if other.transduce_fields is not None:
+                new_other = other.subset_atype(other.transduce_fields)
             else:
-                self.transduction_type = "amap"
-                reduced_chunks = await (self << [str(x) for x in chunks])
-                self.transduction_type = "areduce"
-                self.areduce_batches += reduced_chunks.states
-                return await (self << reduced_chunks)
+                new_other = other
+            if is_str_or_list_of_str(new_other):
+
+                chunks = chunk_list(new_other, chunk_size=self.areduce_batch_size)
+            else:
+                chunks = chunk_list(
+                    new_other.states, chunk_size=self.areduce_batch_size
+                )
+            self.transduction_type = "amap"
+            ReducedOtherAtype = create_model(
+                "ReducedOtherAtype",
+                reduced_other_states=(list[new_other.atype] | None, Field([])),
+            )
+
+            reduced_other_ag = AG(
+                atype=ReducedOtherAtype,
+                states=[
+                    ReducedOtherAtype(reduced_other_states=chunk) for chunk in chunks
+                ],
+            )
+
+            self = await (self << reduced_other_ag)
+            return self
 
         output = self.clone()
         output.states = []
@@ -991,7 +976,7 @@ class AG(BaseModel, Generic[T]):
 
         return reduce((lambda x, y: AG.add_states(x, y)), extended_ags)
 
-    def merge(self, other: "AG") -> "AG":
+    def merge(self, other: "AG", merge_type="pairwise") -> "AG":
         """
         Merge two AGs positionally:
         - The result atype = union of fields from self.atype and other.atype.
@@ -1025,13 +1010,25 @@ class AG(BaseModel, Generic[T]):
 
         # 2) Pairwise merge states (right wins on value conflicts)
         merged_states = []
-        for left_state, right_state in zip_longest(
-            self.states, other.states, fillvalue=None
-        ):
-            left = left_state.model_dump() if left_state is not None else {}
-            right = right_state.model_dump() if right_state is not None else {}
-            data = left | right  # right overwrites left for same keys
-            merged_states.append(merged_atype(**data))
+        if merge_type == "pairwise":
+            for left_state, right_state in zip_longest(
+                self.states, other.states, fillvalue=None
+            ):
+                left = left_state.model_dump() if left_state is not None else {}
+                right = right_state.model_dump() if right_state is not None else {}
+                data = left | right  # right overwrites left for same keys
+                merged_states.append(merged_atype(**data))
+        elif merge_type == "stochastic":
+
+            # In stochastic mode, we want to merge all possible combinations
+            # (cartesian product of states) or blend distributions.
+            # We'll do a cartesian merge here.
+            for left_state in self.states:
+                left = left_state.model_dump()
+                for right_state in other.states:
+                    right = right_state.model_dump()
+                    data = left | right
+                    merged_states.append(merged_atype(**data))
 
         return AG(atype=merged_atype, states=merged_states)
 
@@ -1125,7 +1122,7 @@ class AG(BaseModel, Generic[T]):
         Returns:
             AG: a new Agentics object with states of type `new_atype`.
         """
-        new_ag = deepcopy(self)
+        new_ag = self.clone()
         new_ag.atype = new_atype
         new_ag.states = []
 
@@ -1187,3 +1184,45 @@ class AG(BaseModel, Generic[T]):
 
         # Optionally re-assign it to self.atype
         return self.rebind_atype(new_model)
+
+    #####################################
+    ##### Vector Store Capabilities #####
+    #####################################
+    def build_index(self):
+        logger.debug(
+            f"Indexing AG. {len(self)} states will be indexed, this might take a while"
+        )
+        texts = [x.model_dump_json() for x in self]
+        self.vector_store.import_data(texts)
+
+    def search(self, query: str, k: int = 5) -> AG:
+        if self.vector_store.store.next_id != len(self):
+            self.build_index()
+        filtered_ag = self.clone()
+        filtered_ag.states = []
+        results = self.vector_store.search(query, k=k)
+
+        for result in results:
+            filtered_ag.append(self.states[result[1]["id"]])
+        return filtered_ag
+
+    def cluster(self, n_partitions: int = None) -> list[AG]:
+        if self.vector_store.store.next_id != len(self):
+            self.build_index()
+        if not n_partitions:
+            n_partitions = int(len(self) / 10)
+        logger.debug(
+            f"Clustering AG containing {len(self)} states into {n_partitions} AGs. This might take a while ..."
+        )
+        clusters = self.vector_store.cluster(k=n_partitions)
+
+        results = []
+        cluster_ag = self.clone()
+        cluster_ag.states = []
+        for cluster in clusters:
+            current_cluster_ag = cluster_ag.clone()
+
+            for state in cluster:
+                current_cluster_ag.append(self.states[state["id"]])
+            results.append(current_cluster_ag)
+        return results

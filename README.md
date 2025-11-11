@@ -57,7 +57,7 @@ cd agentics-finance
 
 2. Create and activate a virtual environment:
 ```bash
-python -m venv venv
+python -m venv venv  # make sure to use python >3.9 and <=3.12
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
