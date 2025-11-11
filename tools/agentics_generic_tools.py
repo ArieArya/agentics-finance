@@ -234,14 +234,32 @@ class UnifiedTransductionTool(BaseTool):
 
             # Generate intermediate answer type based on the question
             print(f"\n🤖 Generating dynamic Pydantic model for intermediate analysis...")
-            intermediate_answer_ag = AG()
-            intermediate_answer_ag = asyncio.run(
-                intermediate_answer_ag.generate_atype(question)
-            )
-            pydantic_class = intermediate_answer_ag.atype
-            pydantic_code = intermediate_answer_ag.atype_code
+            try:
+                intermediate_answer_ag = AG()
+                intermediate_answer_ag = asyncio.run(
+                    intermediate_answer_ag.generate_atype(question)
+                )
+                pydantic_class = intermediate_answer_ag.atype
+                pydantic_code = intermediate_answer_ag.atype_code
 
-            print(f"\n✨ Generated Pydantic class: {pydantic_class.__name__}")
+                if pydantic_class is None:
+                    raise ValueError("generate_atype returned None - LLM failed to generate a valid Pydantic type")
+
+                print(f"\n✨ Generated Pydantic class: {pydantic_class.__name__}")
+            except Exception as e:
+                error_msg = str(e)
+                error_trace = traceback.format_exc()
+
+                print("\n" + "=" * 80)
+                print("💥 EXCEPTION OCCURRED during Pydantic Model Generation")
+                print("=" * 80)
+                print(f"❌ Error: {error_msg}")
+                print("\nFull Traceback:")
+                print(error_trace)
+                print("=" * 80 + "\n")
+
+                # Re-raise to be caught by outer exception handler
+                raise
             print("=" * 80)
             print("DYNAMIC PYDANTIC MODEL CODE:")
             print("=" * 80)
@@ -370,7 +388,8 @@ class UnifiedTransductionTool(BaseTool):
             print("💥 EXCEPTION OCCURRED during Transduction Analysis")
             print("=" * 80)
             print(f"❌ Error: {error_msg}")
-            print("\nTraceback:")
+            print(f"❌ Error Type: {type(e).__name__}")
+            print("\nFull Traceback:")
             print(error_trace)
             print("=" * 80 + "\n")
 

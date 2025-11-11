@@ -403,34 +403,10 @@ def display_transduction_flow():
         else:
             st.warning("Could not convert initial states to dataframe")
 
-    # 2. Intermediate Batches
-    if "intermediate_batches" in flow and flow['intermediate_batches']['batches']:
-        st.markdown("---")
-        st.markdown(f"### 2️⃣ Intermediate Batches")
-        st.markdown(f"**Pydantic Class:** `{flow['intermediate_batches']['atype_name']}`")
-
-        # Display model definition - get it from the first batch
-        if flow['intermediate_batches']['batches']:
-            first_batch = flow['intermediate_batches']['batches'][0]
-            if hasattr(first_batch, '__class__'):
-                model_def = get_model_definition(first_batch.__class__)
-                with st.expander("📋 View Model Definition", expanded=False):
-                    st.code(model_def, language="python")
-
-        st.markdown(f"**Number of Batches:** {flow['intermediate_batches']['num_batches']}")
-
-        batches_df = batches_to_df(flow['intermediate_batches']['batches'])
-        if not batches_df.empty:
-            # Add batch number column
-            batches_df.insert(0, 'Batch #', range(1, len(batches_df) + 1))
-            st.dataframe(batches_df, use_container_width=True, height=400)
-        else:
-            st.warning("Could not convert intermediate batches to dataframe")
-
-    # 3. Final Intermediate Result
+    # 2. Final Intermediate Result
     if "final_intermediate" in flow:
         st.markdown("---")
-        st.markdown(f"### 3️⃣ Final Intermediate Result")
+        st.markdown(f"### 2️⃣ Final Intermediate Result")
         st.markdown(f"**Pydantic Class:** `{flow['final_intermediate']['atype_name']}`")
 
         # Display model definition
@@ -443,14 +419,14 @@ def display_transduction_flow():
 
         final_intermediate_df = ag_to_df(flow['final_intermediate']['agentics'])
         if not final_intermediate_df.empty:
-            st.dataframe(final_intermediate_df, use_container_width=True, height=50)
+            st.dataframe(final_intermediate_df, use_container_width=True, height=400)
         else:
             st.warning("Could not convert final intermediate result to dataframe")
 
-    # 4. Final Answer
+    # 3. Final Answer
     if "final_answer" in flow:
         st.markdown("---")
-        st.markdown(f"### 4️⃣ Final Answer")
+        st.markdown(f"### 3️⃣ Final Answer")
         st.markdown(f"**Pydantic Class:** `{flow['final_answer']['atype_name']}`")
 
         # Display model definition

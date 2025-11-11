@@ -131,3 +131,4 @@ if gemini_llm:
     i += 1
 if openai_llm:
     available_llms["openai"] = openai_llm
+    i += 1

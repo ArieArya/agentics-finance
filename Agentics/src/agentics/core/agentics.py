@@ -217,10 +217,10 @@ class AG(BaseModel, Generic[T]):
             generated_atype_ag = await (
                 AG(
                     atype=GeneratedAtype,
-                    instructions="""Generate python code for the input nl type specs. 
-                Make all fields Optional. Use only primitive types for the fields, avoiding nested. 
+                    instructions="""Generate python code for the input nl type specs.
+                Make all fields Optional. Use only primitive types for the fields, avoiding nested.
                 Provide descriptions for the class and all its fields, using Field(None,description= "...")
-                If the input nl type spec is a question, generate a pydantic type that can be used to 
+                If the input nl type spec is a question, generate a pydantic type that can be used to
                 represent the answer to that question.
                 """,
                 )
@@ -670,13 +670,19 @@ class AG(BaseModel, Generic[T]):
                 return [x.string for x in input_messages.states]
 
         if self.transduction_type == "areduce":
-
             if other.transduce_fields is not None:
-                new_other = other.subset_atype(other.transduce_fields)
+                # BUG FIX: subset_atype returns Type[BaseModel], not AG
+                # Use __call__ method instead to get an AG object
+                if isinstance(other.transduce_fields, list):
+                    fields_tuple = tuple(other.transduce_fields)
+                elif isinstance(other.transduce_fields, set):
+                    fields_tuple = tuple(other.transduce_fields)
+                else:
+                    fields_tuple = (other.transduce_fields,)
+                new_other = other(*fields_tuple)
             else:
                 new_other = other
             if is_str_or_list_of_str(new_other):
-
                 chunks = chunk_list(new_other, chunk_size=self.areduce_batch_size)
             else:
                 chunks = chunk_list(
@@ -779,9 +785,21 @@ class AG(BaseModel, Generic[T]):
             )
 
         # Perform Transduction
+        # Check if LLM is a CrewAI provider (not VLLM)
+        # CrewAI LLM() returns provider-specific classes like GeminiCompletion, OpenAICompletion, etc.
+        # VLLM uses AsyncOpenAI, so we check if it's NOT AsyncOpenAI
+        from openai import AsyncOpenAI
+        if self.llm is None:
+            # If no LLM is set, try to get one
+            self.llm = get_llm_provider()
+
+        # Use CrewAI transducer if it's NOT AsyncOpenAI (VLLM uses AsyncOpenAI)
+        # CrewAI providers have classes like GeminiCompletion, OpenAICompletion, etc. from crewai.llms.providers
+        is_crewai_llm = self.llm is not None and not isinstance(self.llm, AsyncOpenAI)
+
         transducer_class = (
             PydanticTransducerCrewAI
-            if type(self.llm) == LLM
+            if is_crewai_llm
             else PydanticTransducerVLLM
         )
         try:
@@ -807,6 +825,10 @@ class AG(BaseModel, Generic[T]):
                 transient_pbar=self.transient_pbar,
             )
         except Exception as e:
+            if self.verbose_transduction or verbose:
+                logger.error(f"Exception during transduction in __lshift__: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
             transduced_results = self.states
 
         n_errors = 0
@@ -850,13 +872,15 @@ class AG(BaseModel, Generic[T]):
         # elif is_str_or_list_of_str(other):
         elif isinstance(other, list):
             for i in range(len(other)):
-                if isinstance(output_states[i], self.atype):
+                if i < len(output_states) and isinstance(output_states[i], self.atype):
                     output.states.append(self.atype(**output_states[i].model_dump()))
                 else:
                     output.states.append(self.atype())
         else:
-            if isinstance(output_states[0], self.atype):
-                output.states.append(self.atype(**output_states[i].model_dump()))
+            if len(output_states) > 0 and isinstance(output_states[0], self.atype):
+                output.states.append(self.atype(**output_states[0].model_dump()))
+            else:
+                output.states.append(self.atype())
         return output
 
     async def copy_fewshots_from_ground_truth(
