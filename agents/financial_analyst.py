@@ -52,7 +52,6 @@ from tools import (
     PriceChartTool,
     PerformanceComparisonChartTool,
     VolatilityChartTool,
-    UnifiedTransductionTool,
 )
 import os
 from dotenv import load_dotenv
@@ -82,7 +81,6 @@ def get_tool_categories():
         "DJ30 Price Analysis": "Analyze DJ30 stock returns, volatility, performance",
         "DJ30 Portfolios": "Construct volatility/momentum/sector-based portfolios",
         "DJ30 Visualizations": "Price charts, performance comparisons for DJ30 stocks",
-        "Advanced Transduction": "Deep analysis using AI-powered data reduction",
     }
 
 
@@ -173,9 +171,6 @@ def create_financial_analyst_agent(enabled_tool_categories=None):
             PriceChartTool(),
             PerformanceComparisonChartTool(),
             VolatilityChartTool(),
-        ],
-        "Advanced Transduction": [
-            UnifiedTransductionTool(),
         ],
     }
 
@@ -288,9 +283,6 @@ def generate_tool_instructions(enabled_tool_categories: list = None) -> str:
 
     if "DJ30 Visualizations" in enabled_tool_categories:
         instructions.append("   - For DJ30 PRICE CHARTS: Use PriceChartTool (candlestick/OHLC), PerformanceComparisonChartTool, VolatilityChartTool")
-
-    if "Advanced Transduction" in enabled_tool_categories:
-        instructions.append("   - For COMPLEX QUESTIONS that standard tools cannot answer: Use UnifiedTransductionTool (specify dataset: macro/market/dj30/firm)")
 
     # Add general guidance
     instructions.append("   - DO NOT query data before creating visualizations (it creates token overload)")
