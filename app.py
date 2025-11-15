@@ -1960,7 +1960,7 @@ if st.session_state.current_page == "Transduction Flow":
 else:
     # Chat page
     st.markdown('<div class="main-header">Financial Data Analyst</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Ask questions about macroeconomic data, market factors, and company fundamentals from 2008 to present</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Ask questions about macroeconomic data, market factors, and company fundamentals from 2018 to present</div>', unsafe_allow_html=True)
 
     # Display chat history
     for message in st.session_state.messages:
@@ -1988,7 +1988,7 @@ else:
 
         user_input = st.text_area(
             "Ask your question:",
-            placeholder="E.g., What was the S&P 500 volatility during the 2008 crisis?",
+            placeholder="E.g., How did market volatility change during the 2020 pandemic?",
             height=100,
             key="user_input"
         )
